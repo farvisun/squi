@@ -46,7 +46,9 @@ brews:
     repository:
       owner: farvisun
       name: homebrew-tap
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+      git:
+        url: git@github.com:farvisun/homebrew-tap.git
+        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
     directory: Formula
     commit_author:
       name: farvisun
@@ -63,7 +65,9 @@ scoops:
     repository:
       owner: farvisun
       name: scoop-bucket
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+      git:
+        url: git@github.com:farvisun/scoop-bucket.git
+        private_key: "{{ .Env.SCOOP_BUCKET_DEPLOY_KEY }}"
     directory: bucket
     commit_author:
       name: farvisun
