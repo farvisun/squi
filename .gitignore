@@ -1,0 +1,7 @@
+/bin/
+/dist/
+/.devhome/
+/dev/keys/
+*.test
+*.out
+/dev/config/state/

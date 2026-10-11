@@ -1,0 +1,73 @@
+version: 2
+project_name: squi
+
+builds:
+  - main: ./cmd/squi
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [README.md, LICENSE]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  filters:
+    exclude: ["^docs:", "^test:", "^ci:", "^chore:"]
+
+# .deb / .rpm / .apk packages attached to each release
+nfpms:
+  - package_name: squi
+    file_name_template: "{{ .ConventionalFileName }}"
+    vendor: farvisun
+    homepage: https://github.com/farvisun/squi
+    maintainer: farvisun <farvisun@gmail.com>
+    description: Lightweight terminal SQL client for PostgreSQL and MySQL
+    license: MIT
+    formats: [deb, rpm, apk]
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/squi/LICENSE
+
+# Homebrew formula in farvisun/homebrew-tap: brew install farvisun/tap/squi
+brews:
+  - name: squi
+    repository:
+      owner: farvisun
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    commit_author:
+      name: farvisun
+      email: farvisun@gmail.com
+    homepage: https://github.com/farvisun/squi
+    description: Lightweight terminal SQL client for PostgreSQL and MySQL
+    license: MIT
+    install: bin.install "squi"
+    test: assert_match version.to_s, shell_output("#{bin}/squi --version")
+
+# Scoop manifest in farvisun/scoop-bucket: scoop install squi
+scoops:
+  - name: squi
+    repository:
+      owner: farvisun
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: bucket
+    commit_author:
+      name: farvisun
+      email: farvisun@gmail.com
+    homepage: https://github.com/farvisun/squi
+    description: Lightweight terminal SQL client for PostgreSQL and MySQL
+    license: MIT

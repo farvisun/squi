@@ -1,0 +1,42 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Start databases and bastions
+        run: make dev-up
+      - name: Wait for seed data
+        run: |
+          for i in $(seq 1 90); do
+            docker compose -f dev/docker-compose.yml exec -T postgres psql -U squi -tAc "select count(*) from order_items" 2>/dev/null | grep -q 20000 &&
+            docker compose -f dev/docker-compose.yml exec -T mysql mysql -usqui -psqui squi -Ne "select count(*) from order_items" 2>/dev/null | grep -q 20000 &&
+            docker compose -f dev/docker-compose.yml exec -T mariadb mariadb -usqui -psqui squi -Ne "select count(*) from order_items" 2>/dev/null | grep -q 20000 && exit 0
+            sleep 2
+          done
+          exit 1
+      - run: make vet
+      - run: make test-integration
+      - run: make build
+
+  release-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean

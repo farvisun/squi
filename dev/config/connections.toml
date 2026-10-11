@@ -1,0 +1,69 @@
+# Connections for the docker playground (make dev). Passwords are all "squi".
+
+[[connection]]
+id = "dev-pg"
+name = "dev-postgres"
+driver = "postgres"
+host = "127.0.0.1"
+port = 54329
+user = "squi"
+database = "squi"
+ssl_mode = "disable"
+env = "dev"
+
+[[connection]]
+id = "dev-mysql"
+name = "dev-mysql"
+driver = "mysql"
+host = "127.0.0.1"
+port = 33069
+user = "squi"
+database = "squi"
+env = "local"
+
+[[connection]]
+id = "dev-mariadb-ro"
+name = "dev-mariadb (read-only)"
+driver = "mysql"
+host = "127.0.0.1"
+port = 33079
+user = "squi"
+database = "squi"
+env = "staging"
+read_only = true
+
+# Postgres reached through bastion1 with the dev key.
+[[connection]]
+id = "dev-pg-ssh"
+name = "pg via ssh (key)"
+driver = "postgres"
+host = "postgres"
+port = 5432
+user = "squi"
+database = "squi"
+ssl_mode = "disable"
+env = "prod"
+[connection.ssh]
+enabled = true
+host = "127.0.0.1"
+port = 22222
+user = "squi"
+auth = "key"
+key_path = "dev/keys/id_ed25519"
+
+# MySQL reached through bastion1 -> bastion2 (ProxyJump), password auth.
+[[connection]]
+id = "dev-mysql-2hop"
+name = "mysql via 2 hops"
+driver = "mysql"
+host = "mysql"
+port = 3306
+user = "squi"
+database = "squi"
+env = "prod"
+[connection.ssh]
+enabled = true
+host = "bastion2"
+user = "squi"
+auth = "password"
+jump_hosts = ["squi@127.0.0.1:22222"]

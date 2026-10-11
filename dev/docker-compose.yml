@@ -1,0 +1,38 @@
+# Local playground for squi. `make dev-up` then `make dev`.
+#   postgres  localhost:54329  squi/squi db=squi
+#   mysql     localhost:33069  squi/squi db=squi   (root/root)
+#   mariadb   localhost:33079  squi/squi db=squi
+#   bastion1  localhost:22222  squi/squi or dev/keys/id_ed25519 (passphrase: none)
+#   bastion2  internal only: reach it via ProxyJump bastion1
+# The databases are also reachable from the bastions as postgres:5432, mysql:3306, mariadb:3306.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: squi, POSTGRES_PASSWORD: squi, POSTGRES_DB: squi }
+    ports: ["54329:5432"]
+    volumes: ["./seed/postgres.sql:/docker-entrypoint-initdb.d/seed.sql:ro"]
+    networks: [internal]
+  mysql:
+    image: mysql:8.4
+    environment: { MYSQL_ROOT_PASSWORD: root, MYSQL_USER: squi, MYSQL_PASSWORD: squi, MYSQL_DATABASE: squi }
+    ports: ["33069:3306"]
+    volumes: ["./seed/mysql.sql:/docker-entrypoint-initdb.d/seed.sql:ro"]
+    networks: [internal]
+  mariadb:
+    image: mariadb:11
+    environment: { MARIADB_ROOT_PASSWORD: root, MARIADB_USER: squi, MARIADB_PASSWORD: squi, MARIADB_DATABASE: squi }
+    ports: ["33079:3306"]
+    volumes: ["./seed/mysql.sql:/docker-entrypoint-initdb.d/seed.sql:ro"]
+    networks: [internal]
+  bastion1:
+    build: ./bastion
+    ports: ["22222:22"]
+    volumes: ["./keys:/keys:ro"]
+    networks: [internal, edge]
+  bastion2:
+    build: ./bastion
+    volumes: ["./keys:/keys:ro"]
+    networks: [internal]
+networks:
+  internal: {}
+  edge: {}

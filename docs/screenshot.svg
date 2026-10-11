@@ -1,0 +1,326 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="1031" height="628" viewBox="0 0 1031 628">
+<style>text{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:14px;white-space:pre}</style>
+<rect width="100%" height="100%" rx="10" fill="#1e1e2e"/>
+<circle cx="22" cy="20" r="6" fill="#ff5f57"/><circle cx="42" cy="20" r="6" fill="#febc2e"/><circle cx="62" cy="20" r="6" fill="#28c840"/>
+<text x="515" y="25" fill="#6c7086" text-anchor="middle">squi</text>
+<rect x="18.00" y="40" width="9.03" height="19" fill="#3fb950"/>
+<rect x="26.43" y="40" width="84.90" height="19" fill="#3fb950"/>
+<rect x="110.73" y="40" width="9.03" height="19" fill="#3fb950"/>
+<text x="26.43" y="54" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#0d1117" font-weight="bold">1 local-pg</text>
+<text x="127.59" y="54" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#7d8590">ctrl+t new</text>
+<text x="18.00" y="73" textLength="269.76" lengthAdjust="spacingAndGlyphs" fill="#585858">╭─ local-pg ───────────────────╮</text>
+<text x="287.76" y="73" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">╭─</text>
+<text x="304.62" y="73" textLength="134.88" lengthAdjust="spacingAndGlyphs" fill="#58a6ff" font-weight="bold"> Query · NORMAL </text>
+<text x="439.50" y="73" textLength="573.24" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">───────────────────────────────────────────────────────────────────╮</text>
+<rect x="26.43" y="78" width="253.50" height="19" fill="#30363c"/>
+<rect x="338.34" y="78" width="9.03" height="19" fill="#58a6ff"/>
+<text x="18.00" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="92" textLength="252.90" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">▸ postgres 7519 kB            </text>
+<text x="279.33" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="92" textLength="25.29" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│1 </text>
+<text x="313.05" y="92" textLength="25.29" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">sel</text>
+<text x="338.34" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#0d1117">e</text>
+<text x="346.77" y="92" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">ct</text>
+<text x="363.63" y="92" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#d0d7de"> o</text>
+<text x="380.49" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="388.92" y="92" textLength="42.15" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">id, u</text>
+<text x="431.07" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="439.50" y="92" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">email, o</text>
+<text x="506.94" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="515.37" y="92" textLength="75.87" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">status, o</text>
+<text x="591.24" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="599.67" y="92" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">total, o</text>
+<text x="667.11" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="675.54" y="92" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">created_at</text>
+<text x="1004.31" y="92" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="111" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="111" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">▾ </text>
+<text x="43.29" y="111" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#38c5cf" font-weight="bold">squi ●</text>
+<text x="102.30" y="111" textLength="42.15" lengthAdjust="spacingAndGlyphs" fill="#7d8590">12 MB</text>
+<text x="279.33" y="111" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="111" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="111" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">2 </text>
+<text x="329.91" y="111" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">from</text>
+<text x="363.63" y="111" textLength="75.87" lengthAdjust="spacingAndGlyphs" fill="#d0d7de"> orders o</text>
+<text x="1004.31" y="111" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="130" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="130" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  ▸ </text>
+<text x="60.15" y="130" textLength="75.87" lengthAdjust="spacingAndGlyphs" fill="#bc8cff">analytics</text>
+<text x="279.33" y="130" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="130" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="130" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">3 </text>
+<text x="329.91" y="130" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">join</text>
+<text x="363.63" y="130" textLength="75.87" lengthAdjust="spacingAndGlyphs" fill="#d0d7de"> users u </text>
+<text x="439.50" y="130" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">on</text>
+<text x="456.36" y="130" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#d0d7de"> u</text>
+<text x="473.22" y="130" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="481.65" y="130" textLength="25.29" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">id </text>
+<text x="506.94" y="130" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#38c5cf">=</text>
+<text x="515.37" y="130" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#d0d7de"> o</text>
+<text x="532.23" y="130" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="540.66" y="130" textLength="59.01" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">user_id</text>
+<text x="1004.31" y="130" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="149" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="149" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  ▾ </text>
+<text x="60.15" y="149" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#bc8cff">public</text>
+<text x="279.33" y="149" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="149" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="149" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">4 </text>
+<text x="321.48" y="149" textLength="42.15" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">where</text>
+<text x="363.63" y="149" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#d0d7de"> o</text>
+<text x="380.49" y="149" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="388.92" y="149" textLength="59.01" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">status </text>
+<text x="447.93" y="149" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#38c5cf">=</text>
+<text x="464.79" y="149" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#3fb950">&#x27;paid&#x27;</text>
+<text x="1004.31" y="149" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="168" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="168" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">    ▾ </text>
+<text x="77.01" y="168" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#7d8590">Tables (5)</text>
+<text x="279.33" y="168" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="168" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="168" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">5 </text>
+<text x="321.48" y="168" textLength="42.15" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">order</text>
+<text x="372.06" y="168" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">by</text>
+<text x="388.92" y="168" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#d0d7de"> o</text>
+<text x="405.78" y="168" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#3fb950">.</text>
+<text x="414.21" y="168" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">total </text>
+<text x="464.79" y="168" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#bc8cff" font-weight="bold">desc</text>
+<text x="498.51" y="168" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">;</text>
+<text x="1004.31" y="168" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="187" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="187" textLength="252.90" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">      ▸ audit_log             </text>
+<text x="279.33" y="187" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="187" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="187" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">~ </text>
+<text x="1004.31" y="187" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="206" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="206" textLength="252.90" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">      ▸ order_items           </text>
+<text x="279.33" y="206" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="206" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="206" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">~ </text>
+<text x="1004.31" y="206" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="225" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="225" textLength="252.90" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">      ▸ orders                </text>
+<text x="279.33" y="225" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="225" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="225" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">~ </text>
+<text x="1004.31" y="225" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="244" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="244" textLength="252.90" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">      ▸ products              </text>
+<text x="279.33" y="244" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="244" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="296.19" y="244" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#7d8590">~ </text>
+<text x="1004.31" y="244" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">│</text>
+<text x="18.00" y="263" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="263" textLength="252.90" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">      ▸ users                 </text>
+<text x="279.33" y="263" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="287.76" y="263" textLength="724.98" lengthAdjust="spacingAndGlyphs" fill="#58a6ff">╰────────────────────────────────────────────────────────────────────────────────────╯</text>
+<text x="18.00" y="282" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="26.43" y="282" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">    ▸ </text>
+<text x="77.01" y="282" textLength="75.87" lengthAdjust="spacingAndGlyphs" fill="#7d8590">Views (1)</text>
+<text x="279.33" y="282" textLength="733.41" lengthAdjust="spacingAndGlyphs" fill="#585858">│╭────────────────────────────────────────────────────────────────────────────────────╮</text>
+<rect x="388.92" y="287" width="9.03" height="19" fill="#7d8590"/>
+<rect x="397.35" y="287" width="51.18" height="19" fill="#7d8590"/>
+<rect x="447.93" y="287" width="9.03" height="19" fill="#7d8590"/>
+<text x="18.00" y="301" textLength="59.01" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│    ▸ </text>
+<text x="77.01" y="301" textLength="185.46" lengthAdjust="spacingAndGlyphs" fill="#7d8590">Materialized views (1)</text>
+<text x="279.33" y="301" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="304.62" y="301" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#7d8590">Messages</text>
+<text x="397.35" y="301" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#0d1117" font-weight="bold">Result</text>
+<text x="1004.31" y="301" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="320" textLength="59.01" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│    ▸ </text>
+<text x="77.01" y="320" textLength="109.59" lengthAdjust="spacingAndGlyphs" fill="#7d8590">Functions (1)</text>
+<text x="279.33" y="320" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="346.77" y="320" textLength="42.15" lengthAdjust="spacingAndGlyphs" fill="#58a6ff" font-weight="bold">id   </text>
+<text x="397.35" y="320" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="414.21" y="320" textLength="160.17" lengthAdjust="spacingAndGlyphs" fill="#58a6ff" font-weight="bold">email              </text>
+<text x="582.81" y="320" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="599.67" y="320" textLength="50.58" lengthAdjust="spacingAndGlyphs" fill="#58a6ff" font-weight="bold">status</text>
+<text x="658.68" y="320" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="675.54" y="320" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#58a6ff" font-weight="bold">total   </text>
+<text x="751.41" y="320" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="768.27" y="320" textLength="219.18" lengthAdjust="spacingAndGlyphs" fill="#58a6ff" font-weight="bold">created_at                </text>
+<text x="995.88" y="320" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="320" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="339" textLength="59.01" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│    ▸ </text>
+<text x="77.01" y="339" textLength="109.59" lengthAdjust="spacingAndGlyphs" fill="#7d8590">Sequences (4)</text>
+<text x="279.33" y="339" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="339" textLength="708.12" lengthAdjust="spacingAndGlyphs" fill="#7d8590">────────────┼─────────────────────┼────────┼──────────┼────────────────────────────…</text>
+<text x="1004.31" y="339" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<rect x="338.34" y="344" width="59.61" height="19" fill="#264f78"/>
+<rect x="405.78" y="344" width="177.63" height="19" fill="#264f78"/>
+<rect x="591.24" y="344" width="68.04" height="19" fill="#264f78"/>
+<rect x="667.11" y="344" width="84.90" height="19" fill="#264f78"/>
+<rect x="759.84" y="344" width="236.64" height="19" fill="#264f78"/>
+<text x="18.00" y="358" textLength="42.15" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│  ▸ </text>
+<text x="60.15" y="358" textLength="151.74" lengthAdjust="spacingAndGlyphs" fill="#bc8cff">information_schema</text>
+<text x="279.33" y="358" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="358" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">1   </text>
+<text x="338.34" y="358" textLength="59.01" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 19997 </text>
+<text x="397.35" y="358" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="358" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user498@example.com </text>
+<text x="582.81" y="358" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="358" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="358" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="358" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26196.07 </text>
+<text x="751.41" y="358" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="358" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:10:13.78642… </text>
+<text x="995.88" y="358" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="358" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="377" textLength="42.15" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│  ▸ </text>
+<text x="60.15" y="377" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#bc8cff">pg_catalog</text>
+<text x="279.33" y="377" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="377" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">2   </text>
+<text x="329.91" y="377" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19993 </text>
+<text x="397.35" y="377" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="377" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user494@example.com </text>
+<text x="582.81" y="377" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="377" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="377" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="377" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26190.83 </text>
+<text x="751.41" y="377" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="377" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:14:13.78642… </text>
+<text x="995.88" y="377" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="377" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="396" textLength="25.29" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│▸ </text>
+<text x="43.29" y="396" textLength="75.87" lengthAdjust="spacingAndGlyphs" fill="#38c5cf">warehouse</text>
+<text x="127.59" y="396" textLength="59.01" lengthAdjust="spacingAndGlyphs" fill="#7d8590">7519 kB</text>
+<text x="279.33" y="396" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="396" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">3   </text>
+<text x="329.91" y="396" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19989 </text>
+<text x="397.35" y="396" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="396" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user490@example.com </text>
+<text x="582.81" y="396" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="396" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="396" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="396" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26185.59 </text>
+<text x="751.41" y="396" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="396" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:18:13.78642… </text>
+<text x="995.88" y="396" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="396" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="415" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="415" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="415" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">4   </text>
+<text x="329.91" y="415" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19985 </text>
+<text x="397.35" y="415" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="415" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user486@example.com </text>
+<text x="582.81" y="415" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="415" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="415" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="415" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26180.35 </text>
+<text x="751.41" y="415" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="415" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:22:13.78642… </text>
+<text x="995.88" y="415" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="415" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="434" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="434" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="434" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">5   </text>
+<text x="329.91" y="434" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19981 </text>
+<text x="397.35" y="434" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="434" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user482@example.com </text>
+<text x="582.81" y="434" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="434" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="434" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="434" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26175.11 </text>
+<text x="751.41" y="434" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="434" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:26:13.78642… </text>
+<text x="995.88" y="434" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="434" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="453" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="453" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="453" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">6   </text>
+<text x="329.91" y="453" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19977 </text>
+<text x="397.35" y="453" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="453" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user478@example.com </text>
+<text x="582.81" y="453" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="453" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="453" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="453" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26169.87 </text>
+<text x="751.41" y="453" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="453" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:30:13.78642… </text>
+<text x="995.88" y="453" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="453" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="472" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="472" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="472" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">7   </text>
+<text x="329.91" y="472" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19973 </text>
+<text x="397.35" y="472" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="472" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user474@example.com </text>
+<text x="582.81" y="472" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="472" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="472" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="472" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26164.63 </text>
+<text x="751.41" y="472" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="472" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:34:13.78642… </text>
+<text x="995.88" y="472" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="472" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="491" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="491" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="491" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">8   </text>
+<text x="329.91" y="491" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19969 </text>
+<text x="397.35" y="491" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="491" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user470@example.com </text>
+<text x="582.81" y="491" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="491" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="491" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="491" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26159.39 </text>
+<text x="751.41" y="491" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="491" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:38:13.78642… </text>
+<text x="995.88" y="491" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="491" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="510" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="510" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="510" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">9   </text>
+<text x="329.91" y="510" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19965 </text>
+<text x="397.35" y="510" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="510" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user466@example.com </text>
+<text x="582.81" y="510" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="510" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="510" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="510" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26154.15 </text>
+<text x="751.41" y="510" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="510" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:42:13.78642… </text>
+<text x="995.88" y="510" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="510" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="529" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="529" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="529" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">10  </text>
+<text x="329.91" y="529" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19961 </text>
+<text x="397.35" y="529" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="529" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user462@example.com </text>
+<text x="582.81" y="529" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="529" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="529" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="529" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26148.91 </text>
+<text x="751.41" y="529" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="529" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:46:13.78642… </text>
+<text x="995.88" y="529" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="529" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="548" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="548" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="548" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">11  </text>
+<text x="329.91" y="548" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  19957 </text>
+<text x="397.35" y="548" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="405.78" y="548" textLength="177.03" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> user458@example.com </text>
+<text x="582.81" y="548" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="591.24" y="548" textLength="67.44" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> paid   </text>
+<text x="658.68" y="548" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="667.11" y="548" textLength="84.30" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 26143.67 </text>
+<text x="751.41" y="548" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="759.84" y="548" textLength="236.04" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4"> 2026-09-27 14:50:13.78642… </text>
+<text x="995.88" y="548" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#7d8590">│</text>
+<text x="1004.31" y="548" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="567" textLength="261.33" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">│                              </text>
+<text x="279.33" y="567" textLength="16.86" lengthAdjust="spacingAndGlyphs" fill="#585858">││</text>
+<text x="296.19" y="567" textLength="193.89" lengthAdjust="spacingAndGlyphs" fill="#7d8590">1000 rows (more…) · 9ms</text>
+<text x="490.08" y="567" textLength="109.59" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">  row 1 · id </text>
+<text x="599.67" y="567" textLength="33.72" lengthAdjust="spacingAndGlyphs" fill="#7d8590">int8</text>
+<text x="1004.31" y="567" textLength="8.43" lengthAdjust="spacingAndGlyphs" fill="#585858">│</text>
+<text x="18.00" y="586" textLength="994.74" lengthAdjust="spacingAndGlyphs" fill="#cdd6f4">╰──────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯</text>
+<rect x="18.00" y="591" width="9.03" height="19" fill="#3fb950"/>
+<rect x="26.43" y="591" width="25.89" height="19" fill="#3fb950"/>
+<rect x="51.72" y="591" width="9.03" height="19" fill="#3fb950"/>
+<rect x="60.15" y="591" width="944.76" height="19" fill="#161b22"/>
+<text x="26.43" y="605" textLength="25.29" lengthAdjust="spacingAndGlyphs" fill="#000000" font-weight="bold">DEV</text>
+<text x="60.15" y="605" textLength="944.16" lengthAdjust="spacingAndGlyphs" fill="#d0d7de">  postgres local-pg · squi                                                     1000 rows (more…) · 9ms · F1 help</text>
+</svg>

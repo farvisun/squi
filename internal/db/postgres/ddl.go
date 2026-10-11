@@ -1,0 +1,269 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/farvisun/squi/internal/db"
+)
+
+// DDL reconstructs the CREATE statement(s) of an object from pg_catalog.
+func (c *conn) DDL(ctx context.Context, ref db.ObjectRef) (string, error) {
+	if ref.Kind == db.KindFunction || ref.Kind == db.KindProcedure {
+		return c.routineDDL(ctx, ref)
+	}
+	q, rel, err := c.relation(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	switch rel.kind {
+	case 'v', 'm':
+		err = viewDDL(ctx, q, rel, &b)
+	case 'S':
+		err = sequenceDDL(ctx, q, ref, &b)
+	default:
+		err = tableDDL(ctx, q, rel, &b)
+	}
+	if err == nil {
+		err = commentsDDL(ctx, q, rel, &b)
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(b.String(), "\n") + "\n", nil
+}
+
+// routineDDL returns pg_get_functiondef for a function or procedure named
+// either "fname" or "fname(identity args)" as listed by Objects.
+func (c *conn) routineDDL(ctx context.Context, ref db.ObjectRef) (string, error) {
+	p, err := c.pool(ref.Database)
+	if err != nil {
+		return "", err
+	}
+	rows, _ := p.Query(ctx, `
+		SELECT pg_get_functiondef(p.oid)
+		FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = $1 AND p.prokind IN ('f', 'p')
+		  AND (p.proname = $2 OR p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' = $2)`,
+		ref.Schema, ref.Name)
+	defs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	switch {
+	case err != nil:
+		return "", err
+	case len(defs) == 0:
+		return "", fmt.Errorf("postgres: routine %s.%s not found", ref.Schema, ref.Name)
+	case len(defs) > 1:
+		return "", fmt.Errorf("postgres: routine %s.%s is overloaded; specify argument types", ref.Schema, ref.Name)
+	}
+	return strings.TrimRight(defs[0], "\n") + ";\n", nil
+}
+
+// qualifiedSQL renders the quoted schema-qualified name of pg_class c.
+const qualifiedSQL = `quote_ident(n.nspname) || '.' || quote_ident(c.relname)`
+
+func tableDDL(ctx context.Context, q querier, rel relation, b *strings.Builder) error {
+	var (
+		name, persistence string
+		partOf, partKey   *string
+		server            *string
+	)
+	err := q.QueryRow(ctx, `
+		SELECT `+qualifiedSQL+`, c.relpersistence::text,
+		       CASE WHEN c.relispartition THEN
+		            (SELECT i.inhparent::regclass::text FROM pg_inherits i WHERE i.inhrelid = c.oid)
+		            || ' ' || pg_get_expr(c.relpartbound, c.oid) END,
+		       CASE WHEN c.relkind = 'p' THEN pg_get_partkeydef(c.oid) END,
+		       (SELECT quote_ident(s.srvname) FROM pg_foreign_table f
+		        JOIN pg_foreign_server s ON s.oid = f.ftserver WHERE f.ftrelid = c.oid)
+		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.oid = $1`, rel.oid).Scan(&name, &persistence, &partOf, &partKey, &server)
+	if err != nil {
+		return err
+	}
+
+	var elems []string
+	if partOf == nil {
+		cols, err := columnDefs(ctx, q, rel.oid)
+		if err != nil {
+			return err
+		}
+		elems = cols
+	}
+	rows, _ := q.Query(ctx, `
+		SELECT 'CONSTRAINT ' || quote_ident(conname) || ' ' || pg_get_constraintdef(oid, true)
+		FROM pg_constraint
+		WHERE conrelid = $1 AND contype IN ('p', 'u', 'c', 'x', 'f') AND conislocal
+		ORDER BY array_position(ARRAY['p', 'u', 'c', 'x', 'f'], contype::text), conname`, rel.oid)
+	cons, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+	elems = append(elems, cons...)
+
+	b.WriteString("CREATE ")
+	switch {
+	case server != nil:
+		b.WriteString("FOREIGN ")
+	case persistence == "u":
+		b.WriteString("UNLOGGED ")
+	}
+	b.WriteString("TABLE " + name)
+	if partOf != nil {
+		b.WriteString(" PARTITION OF " + *partOf)
+	}
+	if len(elems) > 0 || partOf == nil {
+		b.WriteString(" (\n    " + strings.Join(elems, ",\n    ") + "\n)")
+	}
+	if partKey != nil {
+		b.WriteString(" PARTITION BY " + *partKey)
+	}
+	if server != nil {
+		b.WriteString(" SERVER " + *server)
+	}
+	b.WriteString(";\n")
+
+	if err := indexDDL(ctx, q, rel, b); err != nil {
+		return err
+	}
+	rows, _ = q.Query(ctx, `
+		SELECT pg_get_triggerdef(oid, true) FROM pg_trigger
+		WHERE tgrelid = $1 AND NOT tgisinternal ORDER BY tgname`, rel.oid)
+	trg, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+	if len(trg) > 0 {
+		b.WriteString("\n" + strings.Join(trg, ";\n") + ";\n")
+	}
+	return nil
+}
+
+// columnDefs renders column definitions of a table.
+func columnDefs(ctx context.Context, q querier, oid uint32) ([]string, error) {
+	rows, _ := q.Query(ctx, `
+		SELECT quote_ident(a.attname) || ' ' || format_type(a.atttypid, a.atttypmod)
+		    || CASE WHEN a.attcollation <> t.typcollation AND a.attcollation <> 0
+		            THEN ' COLLATE ' || (SELECT quote_ident(cl.collname) FROM pg_collation cl WHERE cl.oid = a.attcollation)
+		            ELSE '' END
+		    || CASE WHEN a.attgenerated = 's'
+		            THEN ' GENERATED ALWAYS AS (' || pg_get_expr(d.adbin, d.adrelid) || ') STORED'
+		            WHEN a.attidentity = 'a' THEN ' GENERATED ALWAYS AS IDENTITY'
+		            WHEN a.attidentity = 'd' THEN ' GENERATED BY DEFAULT AS IDENTITY'
+		            WHEN d.adbin IS NOT NULL THEN ' DEFAULT ' || pg_get_expr(d.adbin, d.adrelid)
+		            ELSE '' END
+		    || CASE WHEN a.attnotnull THEN ' NOT NULL' ELSE '' END
+		FROM pg_attribute a
+		JOIN pg_type t ON t.oid = a.atttypid
+		LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+		WHERE a.attrelid = $1 AND a.attnum > 0 AND NOT a.attisdropped
+		ORDER BY a.attnum`, oid)
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+// indexDDL writes CREATE INDEX statements for indexes that do not back a
+// constraint and are not inherited from a partitioned parent.
+func indexDDL(ctx context.Context, q querier, rel relation, b *strings.Builder) error {
+	rows, _ := q.Query(ctx, `
+		SELECT pg_get_indexdef(i.indexrelid)
+		FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid
+		WHERE i.indrelid = $1
+		  AND NOT EXISTS (SELECT 1 FROM pg_constraint con
+		                  WHERE con.conindid = i.indexrelid AND con.conrelid = i.indrelid
+		                    AND con.contype IN ('p', 'u', 'x'))
+		  AND NOT EXISTS (SELECT 1 FROM pg_inherits WHERE inhrelid = i.indexrelid)
+		ORDER BY ic.relname`, rel.oid)
+	defs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+	if len(defs) > 0 {
+		b.WriteString("\n" + strings.Join(defs, ";\n") + ";\n")
+	}
+	return nil
+}
+
+func viewDDL(ctx context.Context, q querier, rel relation, b *strings.Builder) error {
+	var name, def string
+	err := q.QueryRow(ctx, `
+		SELECT `+qualifiedSQL+`, pg_get_viewdef(c.oid, true)
+		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.oid = $1`, rel.oid).Scan(&name, &def)
+	if err != nil {
+		return err
+	}
+	head := "CREATE OR REPLACE VIEW "
+	if rel.kind == 'm' {
+		head = "CREATE MATERIALIZED VIEW "
+	}
+	b.WriteString(head + name + " AS\n" + strings.TrimSuffix(strings.TrimSpace(def), ";") + ";\n")
+	if rel.kind == 'm' {
+		return indexDDL(ctx, q, rel, b)
+	}
+	return nil
+}
+
+func sequenceDDL(ctx context.Context, q querier, ref db.ObjectRef, b *strings.Builder) error {
+	var (
+		name, typ                     string
+		start, inc, minv, maxv, cache int64
+		cycle                         bool
+	)
+	err := q.QueryRow(ctx, `
+		SELECT quote_ident(schemaname) || '.' || quote_ident(sequencename), data_type::text,
+		       start_value, increment_by, min_value, max_value, cache_size, cycle
+		FROM pg_sequences WHERE schemaname = $1 AND sequencename = $2`,
+		ref.Schema, ref.Name).Scan(&name, &typ, &start, &inc, &minv, &maxv, &cache, &cycle)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("postgres: sequence %s.%s not found", ref.Schema, ref.Name)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(b, "CREATE SEQUENCE %s\n    AS %s\n    START WITH %d\n    INCREMENT BY %d\n    MINVALUE %d\n    MAXVALUE %d\n    CACHE %d",
+		name, typ, start, inc, minv, maxv, cache)
+	if cycle {
+		b.WriteString("\n    CYCLE")
+	}
+	b.WriteString(";\n")
+	return nil
+}
+
+// commentsDDL writes COMMENT ON statements for a relation and its columns.
+func commentsDDL(ctx context.Context, q querier, rel relation, b *strings.Builder) error {
+	var kind string
+	switch rel.kind {
+	case 'v':
+		kind = "VIEW"
+	case 'm':
+		kind = "MATERIALIZED VIEW"
+	case 'S':
+		kind = "SEQUENCE"
+	case 'f':
+		kind = "FOREIGN TABLE"
+	default:
+		kind = "TABLE"
+	}
+	rows, _ := q.Query(ctx, `
+		SELECT 'COMMENT ON ' || CASE WHEN d.objsubid = 0 THEN $2::text || ' ' || `+qualifiedSQL+`
+		       ELSE 'COLUMN ' || `+qualifiedSQL+` || '.' || quote_ident(a.attname) END
+		       || ' IS ' || quote_literal(d.description)
+		FROM pg_description d
+		JOIN pg_class c ON c.oid = d.objoid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		LEFT JOIN pg_attribute a ON a.attrelid = d.objoid AND a.attnum = d.objsubid
+		WHERE d.classoid = 'pg_class'::regclass AND d.objoid = $1
+		ORDER BY d.objsubid`, rel.oid, kind)
+	stmts, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+	if len(stmts) > 0 {
+		b.WriteString("\n" + strings.Join(stmts, ";\n") + ";\n")
+	}
+	return nil
+}
