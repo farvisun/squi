@@ -92,6 +92,34 @@ func TestHostKeyMismatch(t *testing.T) {
 	}
 }
 
+func TestHostKeySkipsMalformedLines(t *testing.T) {
+	s := passwordServer(t, "pw")
+	opts := testOptions(t, s.port(), nil)
+	opts.Password = "pw"
+	other := newSigner(t).PublicKey()
+	good := knownhosts.Line([]string{knownhosts.Normalize(s.addr())}, s.hostKey.PublicKey())
+	bad := strings.Fields(knownhosts.Line([]string{"x"}, other))[1:] // key without host
+	content := "# comment\n" + strings.Join(bad, " ") + "\nonlyhost\n" + good + "\n"
+	if err := os.WriteFile(opts.KnownHostsPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tun, err := Dial(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("malformed lines should be skipped: %v", err)
+	}
+	tun.Close()
+
+	// A mismatch still names the real file and line.
+	line := knownhosts.Line([]string{knownhosts.Normalize(s.addr())}, other)
+	if err := os.WriteFile(opts.KnownHostsPath, []byte(strings.Join(bad, " ")+"\n"+line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Dial(context.Background(), opts)
+	if !errors.Is(err, ErrHostKeyMismatch) || !strings.Contains(err.Error(), opts.KnownHostsPath+":2") {
+		t.Fatalf("err = %v, want mismatch at %s:2", err, opts.KnownHostsPath)
+	}
+}
+
 func TestHostKeyAppendAddsMissingNewline(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "known_hosts")
 	first := knownhosts.Line([]string{"a"}, newSigner(t).PublicKey())

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -47,11 +48,92 @@ func (k *knownHosts) check(hostname string, remote net.Addr, key ssh.PublicKey) 
 			existing = append(existing, f)
 		}
 	}
-	cb, err := knownhosts.New(existing...)
+	cb, err := loadKnownHosts(existing)
 	if err != nil {
 		return fmt.Errorf("ssh: read known_hosts: %w", err)
 	}
 	return cb(hostname, remote, key)
+}
+
+// loadKnownHosts is knownhosts.New, except that lines it cannot parse (a key
+// pasted without a host, a truncated entry, …) are skipped the way OpenSSH
+// skips them, instead of failing every connection.
+func loadKnownHosts(files []string) (ssh.HostKeyCallback, error) {
+	cb, err := knownhosts.New(files...)
+	if err == nil {
+		return cb, nil
+	}
+	// Retry on private copies with each offending line blanked; blanking
+	// rather than deleting keeps line numbers for mismatch reports.
+	dir, derr := os.MkdirTemp("", "squi-known-hosts-")
+	if derr != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	copies := make([]string, len(files))
+	lines := make([][]string, len(files))
+	total := 0
+	for i, f := range files {
+		b, rerr := os.ReadFile(f)
+		if rerr != nil {
+			return nil, err
+		}
+		lines[i] = strings.Split(string(b), "\n")
+		total += len(lines[i])
+		copies[i] = filepath.Join(dir, strconv.Itoa(i))
+		if werr := os.WriteFile(copies[i], b, 0o600); werr != nil {
+			return nil, err
+		}
+	}
+	for range total {
+		cb, err = knownhosts.New(copies...)
+		if err == nil {
+			return renameKnownHosts(cb, copies, files), nil
+		}
+		i, n := badLine(err.Error(), copies)
+		if i < 0 || n < 1 || n > len(lines[i]) || lines[i][n-1] == "" {
+			return nil, err
+		}
+		lines[i][n-1] = ""
+		if werr := os.WriteFile(copies[i], []byte(strings.Join(lines[i], "\n")), 0o600); werr != nil {
+			return nil, err
+		}
+	}
+	return nil, err
+}
+
+// badLine finds the file and 1-based line in a knownhosts parse error
+// ("knownhosts: FILE:LINE: …").
+func badLine(msg string, files []string) (int, int) {
+	for i, f := range files {
+		rest, ok := strings.CutPrefix(msg, "knownhosts: "+f+":")
+		if !ok {
+			continue
+		}
+		num, _, _ := strings.Cut(rest, ":")
+		n, err := strconv.Atoi(num)
+		if err != nil {
+			return -1, 0
+		}
+		return i, n
+	}
+	return -1, 0
+}
+
+// renameKnownHosts makes KeyErrors from cb name the original files.
+func renameKnownHosts(cb ssh.HostKeyCallback, copies, files []string) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		err := cb(hostname, remote, key)
+		var ke *knownhosts.KeyError
+		if errors.As(err, &ke) {
+			for j := range ke.Want {
+				if i := slices.Index(copies, ke.Want[j].Filename); i >= 0 {
+					ke.Want[j].Filename = files[i]
+				}
+			}
+		}
+		return err
+	}
 }
 
 // add appends a known_hosts line for hostname to the primary file.
