@@ -7,6 +7,7 @@ PREFIX   ?= $(HOME)/.local
 TEST_ENV := SQUI_TEST_PG=postgres://squi:squi@127.0.0.1:54329/squi \
             SQUI_TEST_MYSQL=squi:squi@127.0.0.1:33069/squi \
             SQUI_TEST_MARIADB=squi:squi@127.0.0.1:33079/squi \
+            SQUI_TEST_CLICKHOUSE=http://squi:squi@127.0.0.1:18123/squi \
             SQUI_TEST_SSH=1
 
 .PHONY: build install uninstall test test-integration vet dev dev-up dev-down dev-reset snapshot clean
@@ -46,8 +47,8 @@ dev-down:
 
 # Recreate the databases from the seed scripts.
 dev-reset:
-	$(COMPOSE) rm -sfv postgres mysql mariadb
-	$(COMPOSE) up -d postgres mysql mariadb
+	$(COMPOSE) rm -sfv postgres mysql mariadb clickhouse
+	$(COMPOSE) up -d postgres mysql mariadb clickhouse
 
 # Run squi against the playground with a throwaway HOME for known_hosts.
 dev: build

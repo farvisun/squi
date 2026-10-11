@@ -105,14 +105,29 @@ enabled = true
 alias = "prod-bastion"    # from ~/.ssh/config
 ```
 
+### ClickHouse
+
+squi talks to ClickHouse over its **HTTP interface**: port `8123`, or `8443` with
+TLS (set SSL mode to `require`, or `verify-full` to check the certificate). The
+native protocol port `9000` is not used. Over SSH, point the connection at the HTTP
+port as seen from the bastion.
+
+Each tab is its own HTTP session, so `USE` and `SET` persist between statements.
+ClickHouse has no transactions, so manual transactions, inline row editing and
+`EXPLAIN ANALYZE` are not available; `F7` shows `EXPLAIN indexes = 1` as a tree.
+CSV import sends one `INSERT … FORMAT TabSeparated` per batch, and rows from earlier
+batches stay if a later one fails.
+
 ## Safety model
 
 - **Read-only connections** run every session with
   `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` (Postgres) /
-  `SET SESSION TRANSACTION READ ONLY` (MySQL). squi also classifies each statement
+  `SET SESSION TRANSACTION READ ONLY` (MySQL) / the `readonly = 2` setting
+  (ClickHouse). squi also classifies each statement
   and blocks writes before they reach the server.
 - **Destructive statements** (`DROP`, `TRUNCATE`, `ALTER … DROP`, `DELETE`/`UPDATE`
-  without `WHERE` or with an always-true `WHERE`) require typing the database name.
+  without `WHERE` or with an always-true `WHERE`, ClickHouse
+  `ALTER TABLE … DELETE/UPDATE WHERE 1`) require typing the database name.
 - **`prod` connections** ask for confirmation before any write.
 - **Manual transactions** (`ctrl+g m`): statements run inside a transaction until
   you commit (`ctrl+g c`) or roll back (`ctrl+g r`); the status bar shows the
@@ -123,7 +138,7 @@ alias = "prod-bastion"    # from ~/.ssh/config
 ## Development
 
 ```sh
-make dev-up            # Postgres 16, MySQL 8.4, MariaDB 11, two SSH bastions (docker)
+make dev-up            # Postgres 16, MySQL 8.4, MariaDB 11, ClickHouse 25.8, two SSH bastions (docker)
 make dev               # run squi against them (dev/config/connections.toml; passwords "squi")
 make test              # unit tests
 make test-integration  # all tests against the playground, with -race
@@ -133,7 +148,7 @@ make dev-reset         # recreate databases from dev/seed/*.sql
 | Package | Responsibility |
 |---|---|
 | `internal/db` | Driver-neutral interfaces (`Conn`, `Session`, `ResultStream`, `Admin`) |
-| `internal/db/postgres`, `internal/db/mysql` | Engine drivers: catalog queries, DDL, streaming, cancel, explain, admin |
+| `internal/db/postgres`, `internal/db/mysql`, `internal/db/clickhouse` | Engine drivers: catalog queries, DDL, streaming, cancel, explain, admin |
 | `internal/sshx` | SSH tunnels: auth chain, known_hosts, ssh_config, ProxyJump, keepalive/reconnect |
 | `internal/sqltext` | Tokenizer, statement splitter, write/destructive classifier |
 | `internal/schema` | Metadata cache and context-aware autocomplete |

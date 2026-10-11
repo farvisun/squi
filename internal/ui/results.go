@@ -255,6 +255,9 @@ func (r *resultPanel) ensureEditable(m *Model, t *tab, next func() tea.Cmd) tea.
 	if t.ac.cfg.ReadOnly {
 		return m.toast("Connection is read-only", toastWarn)
 	}
+	if !t.ac.dialect().Transactions() {
+		return m.toast("Inline editing needs transactions, which "+t.ac.cfg.Driver+" does not have", toastWarn)
+	}
 	if r.source == nil {
 		return m.toast("Result is not editable: it does not come from a single table", toastWarn)
 	}

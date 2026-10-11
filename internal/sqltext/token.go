@@ -68,7 +68,7 @@ func (t Token) IsHint() bool {
 // reproduces src exactly. Unterminated strings and comments extend to the
 // end of the input.
 func Tokenize(src string, d db.DriverName) []Token {
-	l := lexer{src: src, driver: d, mysql: d == db.MySQL, delim: ";"}
+	l := lexer{src: src, driver: d, mysql: d.MySQLStyle(), delim: ";"}
 	var toks []Token
 	prevSig := -1
 	for l.pos < len(src) {

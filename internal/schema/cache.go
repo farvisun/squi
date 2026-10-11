@@ -165,7 +165,7 @@ func IsSystemSchema(s string) bool {
 // without aborting the rest.
 func (c *Cache) Load(ctx context.Context, conn db.Conn, database string) error {
 	schemas := []string{database}
-	if c.driver != db.MySQL {
+	if !c.driver.MySQLStyle() {
 		var err error
 		if schemas, err = conn.Schemas(ctx, database); err != nil {
 			return err
@@ -174,7 +174,7 @@ func (c *Cache) Load(ctx context.Context, conn db.Conn, database string) error {
 	c.SetSchemas(database, schemas)
 	var errs []error
 	for _, s := range schemas {
-		if c.driver != db.MySQL && IsSystemSchema(s) {
+		if !c.driver.MySQLStyle() && IsSystemSchema(s) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {

@@ -46,6 +46,14 @@ var (
 		unix_timestamp from_unixtime curdate curtime group_concat json_extract json_object json_arrayagg
 		json_unquote concat_ws substring_index locate instr char_length last_insert_id uuid found_rows
 		format sha2`)
+	clickhouseFuncs = strings.Fields(`if multiIf uniq uniqExact uniqCombined countIf sumIf avgIf any anyLast
+		argMax argMin groupArray groupUniqArray quantile quantiles median topK arrayJoin arrayMap
+		arrayFilter arrayExists has hasAny length empty notEmpty toDate toDateTime toDateTime64 toStartOfDay
+		toStartOfHour toStartOfMonth toStartOfWeek toYYYYMM toYYYYMMDD toUnixTimestamp now64 today
+		yesterday dateDiff formatDateTime parseDateTimeBestEffort toString toInt32 toInt64 toUInt32
+		toUInt64 toFloat64 toDecimal64 toTypeName formatReadableSize formatReadableQuantity splitByChar
+		position match extract replaceAll replaceRegexpAll JSONExtractString JSONExtractInt visitParamExtractString
+		cityHash64 sipHash64 rand generateUUIDv4 dictGet tuple mapKeys mapValues windowFunnel retention`)
 )
 
 func wordSet(s string) map[string]bool {
@@ -57,6 +65,9 @@ func wordSet(s string) map[string]bool {
 }
 
 func functions(d db.DriverName) []string {
+	if d == db.ClickHouse {
+		return append(commonFuncs[:len(commonFuncs):len(commonFuncs)], clickhouseFuncs...)
+	}
 	if d == db.MySQL {
 		return append(commonFuncs[:len(commonFuncs):len(commonFuncs)], mysqlFuncs...)
 	}
@@ -71,7 +82,7 @@ func needsQuote(name string, d db.DriverName) bool {
 		return true
 	}
 	reserved := pgReserved
-	if d == db.MySQL {
+	if d.MySQLStyle() {
 		reserved = mysqlReserved
 	}
 	if reserved[strings.ToUpper(name)] {
@@ -81,13 +92,13 @@ func needsQuote(name string, d db.DriverName) bool {
 	for i, r := range name {
 		switch {
 		case r >= '0' && r <= '9':
-			if i == 0 && d != db.MySQL {
+			if i == 0 && !d.MySQLStyle() {
 				return true
 			}
 		case r == '_', r >= 'a' && r <= 'z':
 			digits = false
 		case r == '$' && i > 0:
-		case r >= 'A' && r <= 'Z' && d == db.MySQL:
+		case r >= 'A' && r <= 'Z' && d.MySQLStyle():
 			digits = false
 		case r >= 0x80:
 			digits = false
@@ -95,7 +106,7 @@ func needsQuote(name string, d db.DriverName) bool {
 			return true
 		}
 	}
-	return digits && d == db.MySQL
+	return digits && d.MySQLStyle()
 }
 
 // ident renders name as an identifier, quoting it if needed or forced.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/farvisun/squi/internal/config"
 	"github.com/farvisun/squi/internal/db"
+	"github.com/farvisun/squi/internal/db/clickhouse"
 	"github.com/farvisun/squi/internal/db/mysql"
 	"github.com/farvisun/squi/internal/db/postgres"
 	"github.com/farvisun/squi/internal/history"
@@ -337,6 +338,10 @@ func isCancelled(err error) bool {
 	if errors.As(err, &me) {
 		return me.Number == 1317
 	}
+	var ce *clickhouse.QueryError
+	if errors.As(err, &ce) {
+		return ce.Code == clickhouse.CodeQueryCancelled
+	}
 	return errors.Is(err, context.Canceled)
 }
 
@@ -346,6 +351,12 @@ func errorOffset(err error, st sqltext.Statement, src string) int {
 	if errors.As(err, &pe) && pe.Position > 0 {
 		runes := []rune(st.SQL)
 		p := min(pe.Position-1, len(runes))
+		return st.Start + len(string(runes[:p]))
+	}
+	var ce *clickhouse.QueryError
+	if errors.As(err, &ce) && ce.Position > 0 {
+		runes := []rune(st.SQL)
+		p := min(ce.Position-1, len(runes))
 		return st.Start + len(string(runes[:p]))
 	}
 	var me *mysql.QueryError

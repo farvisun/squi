@@ -37,9 +37,17 @@ var mysqlKeywords = []string{
 	"UNLOCK", "UNSIGNED", "USE", "XOR", "ZEROFILL",
 }
 
+var clickhouseKeywords = []string{
+	"ARRAY", "ASOF", "ATTACH", "CODEC", "DATABASES", "DETACH", "DICTIONARY", "ENGINE", "EXCHANGE",
+	"FINAL", "FORMAT", "GLOBAL", "GRANULARITY", "ILIKE", "KILL", "LIVE", "MATERIALIZED", "MUTATION",
+	"OPTIMIZE", "PARTITION", "POPULATE", "PREWHERE", "SAMPLE", "SETTINGS", "SYNC", "SYSTEM", "TABLES",
+	"TTL", "USE", "WATCH",
+}
+
 var (
-	pgKeywordSet    = keywordSet(commonKeywords, pgKeywords)
-	mysqlKeywordSet = keywordSet(commonKeywords, mysqlKeywords)
+	pgKeywordSet         = keywordSet(commonKeywords, pgKeywords)
+	mysqlKeywordSet      = keywordSet(commonKeywords, mysqlKeywords)
+	clickhouseKeywordSet = keywordSet(commonKeywords, clickhouseKeywords)
 )
 
 func keywordSet(lists ...[]string) map[string]bool {
@@ -54,6 +62,9 @@ func keywordSet(lists ...[]string) map[string]bool {
 
 // IsKeyword reports whether word (any case) is a keyword of dialect d.
 func IsKeyword(word string, d db.DriverName) bool {
+	if d == db.ClickHouse {
+		return clickhouseKeywordSet[strings.ToUpper(word)]
+	}
 	if d == db.MySQL {
 		return mysqlKeywordSet[strings.ToUpper(word)]
 	}
@@ -63,8 +74,11 @@ func IsKeyword(word string, d db.DriverName) bool {
 // Keywords returns the sorted, upper-case keyword list of a dialect.
 func Keywords(d db.DriverName) []string {
 	extra := pgKeywords
-	if d == db.MySQL {
+	switch d {
+	case db.MySQL:
 		extra = mysqlKeywords
+	case db.ClickHouse:
+		extra = clickhouseKeywords
 	}
 	out := append(slices.Clone(commonKeywords), extra...)
 	slices.Sort(out)

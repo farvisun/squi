@@ -441,11 +441,14 @@ func (p *explainPanel) view(w, h int, focused bool) string {
 				arrow = "▸ "
 			}
 		}
-		metrics := fmt.Sprintf("cost=%.2f rows=%.0f", r.n.Cost, r.n.Rows)
+		var metrics string
+		if r.n.Cost > 0 || r.n.Rows > 0 { // ClickHouse plans carry no estimates
+			metrics = fmt.Sprintf("  cost=%.2f rows=%.0f", r.n.Cost, r.n.Rows)
+		}
 		if p.analyze && r.n.Time > 0 {
 			metrics += fmt.Sprintf(" time=%.3fms", r.n.Time)
 		}
-		line := strings.Repeat("  ", r.depth) + arrow + p.heat(r.n).Render(r.n.Title) + "  " + theme.Dim.Render(metrics)
+		line := strings.Repeat("  ", r.depth) + arrow + p.heat(r.n).Render(r.n.Title) + theme.Dim.Render(metrics)
 		line = components.FitStyled(line, w)
 		if i == p.ix && focused {
 			line = lipgloss.NewStyle().Background(theme.SelBg).Render(components.Fit(stripANSI(line), w))

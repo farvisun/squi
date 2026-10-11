@@ -14,9 +14,14 @@ import (
 type DriverName string
 
 const (
-	Postgres DriverName = "postgres"
-	MySQL    DriverName = "mysql"
+	Postgres   DriverName = "postgres"
+	MySQL      DriverName = "mysql"
+	ClickHouse DriverName = "clickhouse"
 )
+
+// MySQLStyle reports engines with MySQL's SQL surface: databases instead of
+// schemas, backtick-quoted identifiers and backslash escapes in strings.
+func (d DriverName) MySQLStyle() bool { return d == MySQL || d == ClickHouse }
 
 // DialFunc opens a raw network connection. It is used to route database
 // traffic through an SSH tunnel; nil means a plain net.Dialer.
@@ -319,9 +324,12 @@ type Dialect struct {
 // HasSchemas reports whether the engine has a schema level below databases.
 func (d Dialect) HasSchemas() bool { return d.Driver == Postgres }
 
+// Transactions reports whether the engine supports BEGIN/COMMIT/ROLLBACK.
+func (d Dialect) Transactions() bool { return d.Driver != ClickHouse }
+
 // QuoteIdent quotes an identifier.
 func (d Dialect) QuoteIdent(s string) string {
-	if d.Driver == MySQL {
+	if d.Driver.MySQLStyle() {
 		return "`" + strings.ReplaceAll(s, "`", "``") + "`"
 	}
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
@@ -329,6 +337,9 @@ func (d Dialect) QuoteIdent(s string) string {
 
 // QuoteLiteral quotes a string literal.
 func (d Dialect) QuoteLiteral(s string) string {
+	if d.Driver == ClickHouse {
+		return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
+	}
 	if d.Driver == MySQL {
 		r := strings.NewReplacer(`\`, `\\`, `'`, `''`, "\x00", `\0`, "\n", `\n`, "\r", `\r`, "\x1a", `\Z`)
 		return "'" + r.Replace(s) + "'"
@@ -350,9 +361,9 @@ func (d Dialect) Value(c Cell) string {
 // Qualified returns the schema-qualified, quoted name of ref.
 func (d Dialect) Qualified(ref ObjectRef) string {
 	switch {
-	case d.Driver == MySQL && ref.Database != "":
+	case d.Driver.MySQLStyle() && ref.Database != "":
 		return d.QuoteIdent(ref.Database) + "." + d.QuoteIdent(ref.Name)
-	case d.Driver == MySQL && ref.Schema != "":
+	case d.Driver.MySQLStyle() && ref.Schema != "":
 		return d.QuoteIdent(ref.Schema) + "." + d.QuoteIdent(ref.Name)
 	case ref.Schema != "":
 		return d.QuoteIdent(ref.Schema) + "." + d.QuoteIdent(ref.Name)
@@ -407,8 +418,11 @@ func Get(name DriverName) (Driver, bool) {
 
 // DefaultPort returns the default TCP port of an engine.
 func DefaultPort(name DriverName) int {
-	if name == MySQL {
+	switch name {
+	case MySQL:
 		return 3306
+	case ClickHouse:
+		return 8123 // HTTP interface
 	}
 	return 5432
 }

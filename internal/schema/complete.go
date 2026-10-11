@@ -117,7 +117,7 @@ func Complete(src string, cursor int, c *Cache, ctx Context) Completion {
 		cp.member(before)
 	case cp.isTableContext(before):
 		cp.tables()
-	case n > 0 && before[n-1].Upper() == "USE" && d == db.MySQL:
+	case n > 0 && before[n-1].Upper() == "USE" && d.MySQLStyle():
 		cp.databases()
 	case n > 0 && cp.isExprContext(before[n-1]):
 		cp.columns()
@@ -266,7 +266,7 @@ func (cp *completer) searchPath() []string {
 	if len(cp.ctx.SearchPath) > 0 {
 		return cp.ctx.SearchPath
 	}
-	if cp.d.Driver == db.MySQL {
+	if cp.d.Driver.MySQLStyle() {
 		if cp.ctx.Database == "" {
 			return nil
 		}
@@ -277,7 +277,7 @@ func (cp *completer) searchPath() []string {
 
 // location maps a qualifier to the cache's (database, schema) pair.
 func (cp *completer) location(qual string) (database, schema string) {
-	if cp.d.Driver == db.MySQL {
+	if cp.d.Driver.MySQLStyle() {
 		return qual, qual
 	}
 	return cp.ctx.Database, qual
@@ -367,7 +367,7 @@ func (cp *completer) tables() {
 		}
 	}
 	var others []string
-	if cp.d.Driver == db.MySQL {
+	if cp.d.Driver.MySQLStyle() {
 		others = cp.c.Databases()
 		cp.databases()
 	} else {

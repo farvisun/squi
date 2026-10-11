@@ -30,8 +30,8 @@ var synStyles = [synCount]lipgloss.Style{
 
 // LexerFor returns the chroma lexer name for a driver name.
 func LexerFor(driver string) string {
-	if driver == "mysql" {
-		return "mysql"
+	if driver == "mysql" || driver == "clickhouse" {
+		return "mysql" // backtick identifiers, # comments
 	}
 	return "postgresql"
 }

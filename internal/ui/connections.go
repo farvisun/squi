@@ -137,7 +137,7 @@ func (c *connManager) edit(m *Model, cfg config.Connection) {
 	f := components.NewForm()
 	f.Section("Connection")
 	f.Text("name", "Name", cfg.Name, "e.g. prod-api")
-	f.Select("driver", "Driver", []string{"postgres", "mysql"}, cfg.Driver)
+	f.Select("driver", "Driver", []string{"postgres", "mysql", "clickhouse"}, cfg.Driver).Hint = "mysql also covers MariaDB; clickhouse uses the HTTP port"
 	f.Text("host", "Host", cfg.Host, "localhost")
 	f.Number("port", "Port", cfg.Port, "5432")
 	f.Text("user", "User", cfg.User, "")

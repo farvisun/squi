@@ -12,7 +12,8 @@ import (
 
 	"github.com/farvisun/squi/internal/config"
 	"github.com/farvisun/squi/internal/db"
-	_ "github.com/farvisun/squi/internal/db/mysql" // register driver
+	"github.com/farvisun/squi/internal/db/clickhouse" // registers the driver
+	_ "github.com/farvisun/squi/internal/db/mysql"    // register driver
 	_ "github.com/farvisun/squi/internal/db/postgres"
 	"github.com/farvisun/squi/internal/schema"
 	"github.com/farvisun/squi/internal/secrets"
@@ -152,6 +153,10 @@ func isAuthError(err error) bool {
 	if errors.As(err, &me) {
 		return me.Number == 1045
 	}
+	var ce *clickhouse.QueryError
+	if errors.As(err, &ce) {
+		return ce.Code == clickhouse.CodeAuthFailed || ce.Code == clickhouse.CodeRequiredPassword
+	}
 	s := err.Error()
 	return strings.Contains(s, "password authentication failed") || strings.Contains(s, "no password supplied") ||
 		strings.Contains(s, "Access denied for user")
@@ -167,6 +172,10 @@ func isUnknownDatabase(err error) bool {
 	var me *mysql.MySQLError
 	if errors.As(err, &me) {
 		return me.Number == 1049
+	}
+	var ce *clickhouse.QueryError
+	if errors.As(err, &ce) {
+		return ce.Code == clickhouse.CodeUnknownDatabase
 	}
 	s := err.Error()
 	return strings.Contains(s, "SQLSTATE 3D000") || strings.Contains(s, "Unknown database")

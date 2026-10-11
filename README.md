@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>A fast, keyboard-driven SQL client for your terminal.</strong><br>
-  PostgreSQL · MySQL · MariaDB — over SSH, safe on production, one small binary.
+  PostgreSQL · MySQL · MariaDB · ClickHouse — over SSH, safe on production, one small binary.
 </p>
 
 <p align="center">
@@ -35,6 +35,8 @@ server you reached over SSH.
   destructive statements, a red status bar on `prod`, manual transactions.
 - **Import / export** CSV, TSV, JSON, SQL; **EXPLAIN** as a plan tree; **admin views**
   for sessions, variables, users and sizes.
+- **ClickHouse** over its HTTP interface — engines, sorting and partition keys,
+  skipping indexes, parts and `EXPLAIN indexes = 1` included.
 - **Pick up where you left off** — tabs and queries are restored on the next start.
 
 ## Install
@@ -74,7 +76,7 @@ and the full key reference.
 ## Development
 
 ```sh
-make dev-up   # Postgres, MySQL, MariaDB and SSH bastions in Docker
+make dev-up   # Postgres, MySQL, MariaDB, ClickHouse and SSH bastions in Docker
 make dev      # run squi against them
 make test-integration
 ```

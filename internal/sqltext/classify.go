@@ -101,7 +101,7 @@ func classify(ts []Token, d db.DriverName) Class {
 		c.Kind = KindRead
 		if i := topLevel(ts, "INTO"); i >= 0 {
 			switch {
-			case d != db.MySQL:
+			case !d.MySQLStyle():
 				c.Kind, c.Reason = KindWrite, "SELECT INTO creates a table"
 			case word(ts, i+1) == "OUTFILE" || word(ts, i+1) == "DUMPFILE":
 				c.Kind, c.Reason = KindWrite, "SELECT INTO OUTFILE writes a file on the server"
@@ -109,6 +109,10 @@ func classify(ts []Token, d db.DriverName) Class {
 		}
 	case "SHOW", "DESCRIBE", "DESC", "VALUES", "TABLE", "DECLARE", "FETCH", "MOVE", "CLOSE", "HANDLER", "CHECKSUM", "HELP":
 		c.Kind = KindRead
+	case "EXISTS", "CHECK", "WATCH":
+		if d == db.ClickHouse {
+			c.Kind = KindRead
+		}
 	case "EXPLAIN":
 		return classifyExplain(ts, d)
 	case "INSERT", "REPLACE", "UPSERT", "MERGE":
@@ -142,9 +146,21 @@ func classify(ts []Token, d db.DriverName) Class {
 	case "ALTER":
 		c.Kind = KindDDL
 		c.Destructive, c.Reason = alterDrops(ts)
+		if d == db.ClickHouse && !c.Destructive {
+			// mutations: ALTER TABLE t DELETE / UPDATE … WHERE cond
+			if i := topLevelAny(ts, "DELETE", "UPDATE"); i >= 0 {
+				if bad, why := unfiltered(ts[i:], word(ts, i)); bad {
+					c.Destructive, c.Reason = true, "ALTER TABLE … "+why
+				}
+			}
+		}
 	case "CREATE", "RENAME", "COMMENT", "GRANT", "REVOKE", "REINDEX", "VACUUM", "ANALYZE", "CLUSTER",
 		"REFRESH", "OPTIMIZE", "REPAIR", "SECURITY", "IMPORT", "REASSIGN", "INSTALL", "UNINSTALL":
 		c.Kind = KindDDL
+	case "SYSTEM", "ATTACH", "DETACH", "EXCHANGE", "UNDROP", "BACKUP", "RESTORE":
+		if d == db.ClickHouse {
+			c.Kind = KindDDL
+		}
 	case "BEGIN":
 		c.Kind, c.TxOp = KindTx, TxBegin
 		c.markReadWrite(ts)
@@ -154,7 +170,7 @@ func classify(ts []Token, d db.DriverName) Class {
 			c.markReadWrite(ts)
 		}
 	case "COMMIT", "END":
-		if kw == "END" && d == db.MySQL {
+		if kw == "END" && d.MySQLStyle() {
 			break
 		}
 		c.Kind, c.TxOp = KindTx, TxCommit

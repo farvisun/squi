@@ -524,8 +524,20 @@ func (m *Model) runImport(ac *activeConn, ref db.ObjectRef, path string, mapping
 			return jobDoneMsg{err: err}
 		}
 		defer s.Close()
-		if err := s.Begin(ctx); err != nil {
-			return jobDoneMsg{err: err}
+		// engines without transactions (ClickHouse) keep the rows loaded
+		// before a failure
+		tx := ac.dialect().Transactions()
+		if tx {
+			if err := s.Begin(ctx); err != nil {
+				return jobDoneMsg{err: err}
+			}
+		}
+		rollback := func() string {
+			if !tx {
+				return "rows loaded so far were kept"
+			}
+			_ = s.Rollback(ctx)
+			return "rolled back"
 		}
 		var total int64
 		for {
@@ -546,20 +558,22 @@ func (m *Model) runImport(ac *activeConn, ref db.ObjectRef, path string, mapping
 				n, err := s.BulkInsert(ctx, ref, targets, mapped)
 				total += n
 				if err != nil {
-					_ = s.Rollback(ctx)
-					return jobDoneMsg{err: fmt.Errorf("import failed after %d rows (rolled back): %w", total, err)}
+					how := rollback()
+					return jobDoneMsg{err: fmt.Errorf("import failed after %d rows (%s): %w", total, how, err)}
 				}
 			}
 			if errors.Is(rerr, io.EOF) {
 				break
 			}
 			if rerr != nil {
-				_ = s.Rollback(ctx)
-				return jobDoneMsg{err: fmt.Errorf("read CSV (rolled back): %w", rerr)}
+				how := rollback()
+				return jobDoneMsg{err: fmt.Errorf("read CSV (%s): %w", how, rerr)}
 			}
 		}
-		if err := s.Commit(ctx); err != nil {
-			return jobDoneMsg{err: err}
+		if tx {
+			if err := s.Commit(ctx); err != nil {
+				return jobDoneMsg{err: err}
+			}
 		}
 		return jobDoneMsg{text: fmt.Sprintf("Imported %d rows into %s", total, ref.Name), ac: ac, ref: &ref}
 	})
@@ -676,6 +690,9 @@ func (m *Model) explain(t *tab, analyze bool) tea.Cmd {
 	if sql == "" {
 		return m.toast("Nothing to explain", toastWarn)
 	}
+	if analyze && !t.ac.dialect().Transactions() {
+		return m.toast(t.ac.cfg.Driver+" has no EXPLAIN ANALYZE — F7 shows the plan", toastWarn)
+	}
 	write := sqltext.Classify(sql, t.ac.driver()).IsWrite()
 	run := func() tea.Cmd {
 		return m.op(t, "explaining", func(ctx context.Context, s db.Session) tea.Msg {
@@ -731,6 +748,9 @@ func (m *Model) txAction(t *tab, what string) tea.Cmd {
 }
 
 func (m *Model) txMenu(t *tab) tea.Cmd {
+	if !t.ac.dialect().Transactions() {
+		return m.toast("ClickHouse has no transactions: every statement applies immediately", toastWarn)
+	}
 	item := func(key, label, v string) menuItem {
 		return menuItem{key: key, label: label, run: func() tea.Cmd { return m.txChoice(t, v) }}
 	}

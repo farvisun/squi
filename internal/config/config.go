@@ -244,9 +244,12 @@ func normalize(c *Connection) {
 		c.Driver = "postgres"
 	}
 	if c.Port == 0 {
-		if c.Driver == "mysql" {
+		switch c.Driver {
+		case "mysql":
 			c.Port = 3306
-		} else {
+		case "clickhouse":
+			c.Port = 8123
+		default:
 			c.Port = 5432
 		}
 	}

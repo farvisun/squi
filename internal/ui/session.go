@@ -77,7 +77,8 @@ func (m *Model) restoreTabs(ac *activeConn) tea.Cmd {
 		if st.Database != "" {
 			t.db = st.Database
 		}
-		t.schema, t.label, t.manualTx = st.Schema, st.Label, st.ManualTx
+		t.schema, t.label = st.Schema, st.Label
+		t.manualTx = st.ManualTx && ac.dialect().Transactions()
 		if st.SQL != "" {
 			t.editor.SetValue(st.SQL)
 			t.editor.SetCursorOffset(st.Cursor)

@@ -32,6 +32,16 @@ database = "squi"
 env = "staging"
 read_only = true
 
+[[connection]]
+id = "dev-clickhouse"
+name = "dev-clickhouse"
+driver = "clickhouse"
+host = "127.0.0.1"
+port = 18123
+user = "squi"
+database = "squi"
+env = "dev"
+
 # Postgres reached through bastion1 with the dev key.
 [[connection]]
 id = "dev-pg-ssh"
@@ -67,3 +77,21 @@ host = "bastion2"
 user = "squi"
 auth = "password"
 jump_hosts = ["squi@127.0.0.1:22222"]
+
+# ClickHouse (HTTP interface) reached through bastion1 with the dev key.
+[[connection]]
+id = "dev-clickhouse-ssh"
+name = "clickhouse via ssh (key)"
+driver = "clickhouse"
+host = "clickhouse"
+port = 8123
+user = "squi"
+database = "squi"
+env = "staging"
+[connection.ssh]
+enabled = true
+host = "127.0.0.1"
+port = 22222
+user = "squi"
+auth = "key"
+key_path = "dev/keys/id_ed25519"

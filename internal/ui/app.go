@@ -272,7 +272,7 @@ func (m *Model) createTab(ac *activeConn) *tab {
 		db:       ac.cfg.Database,
 		editor:   components.NewEditor(m.settings.VimMode, components.LexerFor(ac.cfg.Driver)),
 		out:      newOutput(),
-		manualTx: m.settings.DefaultTxManual,
+		manualTx: m.settings.DefaultTxManual && ac.dialect().Transactions(),
 	}
 	t.editor.Placeholder = "-- write SQL here; ctrl+enter or F5 runs the statement under the cursor"
 	ac.refs++
