@@ -487,3 +487,21 @@ func TestFormDatabasePicker(t *testing.T) {
 		t.Fatalf("database = %q", got)
 	}
 }
+
+// Runes typed quickly arrive together; words that are also key names
+// ("end", "up", "esc") must be inserted as text.
+func TestBatchedRunesAreText(t *testing.T) {
+	m, tb, _ := newTestModel(t, config.Connection{ID: "c", Name: "dev", Driver: "postgres"})
+	setSQL(tb, "")
+	for _, w := range []string{"case", " ", "end", " ", "up", " ", "esc"} {
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(w)}
+		if w == " " {
+			msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")}
+		}
+		_, cmd := m.Update(msg)
+		drain(m, cmd)
+	}
+	if got := tb.editor.Value(); got != "case end up esc" {
+		t.Fatalf("editor = %q", got)
+	}
+}

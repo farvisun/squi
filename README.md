@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.svg" alt="squi: schema explorer, SQL editor and results grid" width="900">
+  <img src="docs/demo.gif" alt="squi demo: autocomplete, results, EXPLAIN ANALYZE, table details and a guarded DELETE on production over SSH" width="900">
 </p>
 
 ## Why squi

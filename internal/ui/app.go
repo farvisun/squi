@@ -491,6 +491,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		return m, m.handleMouse(msg)
 	case tea.KeyMsg:
+		// Fast typing, SSH latency or an unbracketed paste can deliver several
+		// runes in one message. Its String() is the text itself, so "end",
+		// "up" or "esc" would match key bindings; handle each rune on its own.
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 && !msg.Paste {
+			var cmds []tea.Cmd
+			for _, r := range msg.Runes {
+				cmds = append(cmds, m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: msg.Alt}))
+			}
+			return m, tea.Batch(cmds...)
+		}
 		return m, m.handleKey(msg)
 	}
 	return m, nil
@@ -530,15 +540,6 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 		return m.windowKey(k)
 	}
 	inserting := m.focus == focusEditor && t != nil && t.editor.Inserting()
-	// Fast typing or an unbracketed paste can deliver several runes in one
-	// message; outside text entry, treat them as individual key presses.
-	if km.Type == tea.KeyRunes && len(km.Runes) > 1 && !km.Paste && !inserting {
-		var cmds []tea.Cmd
-		for _, r := range km.Runes {
-			cmds = append(cmds, m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}))
-		}
-		return tea.Batch(cmds...)
-	}
 	switch k {
 	case "f1":
 		return m.showHelp()
