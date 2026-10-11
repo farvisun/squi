@@ -3,10 +3,11 @@
 #   mysql     localhost:33069  squi/squi db=squi   (root/root)
 #   mariadb   localhost:33079  squi/squi db=squi
 #   clickhouse localhost:18123 (HTTP)  squi/squi db=squi
+#   sqlserver localhost:14339  squi/squi db=squi   (sa/Squi_dev_1; amd64 image, emulated on arm64)
 #   bastion1  localhost:22222  squi/squi or dev/keys/id_ed25519 (passphrase: none)
 #   bastion2  internal only: reach it via ProxyJump bastion1
 # The databases are also reachable from the bastions as postgres:5432, mysql:3306,
-# mariadb:3306 and clickhouse:8123.
+# mariadb:3306, clickhouse:8123 and sqlserver:1433.
 services:
   postgres:
     image: postgres:16-alpine
@@ -36,6 +37,26 @@ services:
     ports: ["18123:8123"]
     ulimits: { nofile: { soft: 262144, hard: 262144 } }
     volumes: ["./seed/clickhouse.sql:/docker-entrypoint-initdb.d/seed.sql:ro"]
+    networks: [internal]
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    environment: { ACCEPT_EULA: "Y", MSSQL_SA_PASSWORD: Squi_dev_1, MSSQL_PID: Developer }
+    ports: ["14339:1433"]
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-C", "-S", "localhost", "-U", "sa", "-P", "Squi_dev_1", "-Q", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    networks: [internal]
+  # SQL Server has no init directory: load the seed once the server is up
+  sqlserver-seed:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    depends_on: { sqlserver: { condition: service_healthy } }
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "sqlserver", "-U", "sa", "-P", "Squi_dev_1", "-i", "/seed.sql"]
+    volumes: ["./seed/sqlserver.sql:/seed.sql:ro"]
+    restart: "no"
     networks: [internal]
   bastion1:
     build: ./bastion

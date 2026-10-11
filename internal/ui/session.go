@@ -17,6 +17,9 @@ import (
 func (m *Model) sessionState() config.Session {
 	var sess config.Session
 	for i, t := range m.tabs {
+		if t.ac.cfg.Transient {
+			continue // opened from a URL: nothing to reconnect to next time
+		}
 		sess.Tabs = append(sess.Tabs, config.SessionTab{
 			Conn:     t.ac.cfg.ID,
 			Database: t.db,
@@ -88,7 +91,7 @@ func (m *Model) restoreTabs(ac *activeConn) tea.Cmd {
 		}
 		schema := t.schema
 		cmds = append(cmds, m.op(t, "opening session", func(ctx context.Context, s db.Session) tea.Msg {
-			if schema != "" && ac.dialect().HasSchemas() {
+			if schema != "" && ac.driver() == db.Postgres {
 				if rs, err := s.Run(ctx, "SET search_path TO "+ac.dialect().QuoteIdent(schema)+", public"); err == nil {
 					_, _ = rs.Next(1)
 					_ = rs.Close()

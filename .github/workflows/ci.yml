@@ -20,7 +20,8 @@ jobs:
             docker compose -f dev/docker-compose.yml exec -T postgres psql -U squi -tAc "select count(*) from order_items" 2>/dev/null | grep -q 20000 &&
             docker compose -f dev/docker-compose.yml exec -T mysql mysql -usqui -psqui squi -Ne "select count(*) from order_items" 2>/dev/null | grep -q 20000 &&
             docker compose -f dev/docker-compose.yml exec -T mariadb mariadb -usqui -psqui squi -Ne "select count(*) from order_items" 2>/dev/null | grep -q 20000 &&
-            curl -s -u squi:squi 'http://127.0.0.1:18123/?query=SELECT+count()+FROM+squi.events' | grep -qx 100000 && exit 0
+            curl -s -u squi:squi 'http://127.0.0.1:18123/?query=SELECT+count()+FROM+squi.events' | grep -qx 100000 &&
+            [ "$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' dev-sqlserver-seed-1 2>/dev/null)" = "exited 0" ] && exit 0
             sleep 2
           done
           exit 1

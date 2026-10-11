@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"strings"
-
 	"github.com/farvisun/squi/internal/sqltext"
 )
 
@@ -33,13 +31,7 @@ func identName(t sqltext.Token) string {
 	if t.Kind != sqltext.TokQuotedIdent {
 		return t.Text
 	}
-	s := strings.TrimPrefix(t.Text, "U&")
-	if len(s) < 2 {
-		return strings.Trim(s, "\"`")
-	}
-	q := s[:1]
-	s = strings.TrimSuffix(s[1:], q)
-	return strings.ReplaceAll(s, q+q, q)
+	return sqltext.UnquoteIdent(t.Text)
 }
 
 // parseRefs collects the table references of a statement's significant

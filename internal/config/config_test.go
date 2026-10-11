@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConnectionsRoundTrip(t *testing.T) {
@@ -86,5 +87,62 @@ func TestSessionRoundTrip(t *testing.T) {
 	}
 	if st, _ := os.Stat(s.SessionPath()); st.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v", st.Mode())
+	}
+}
+
+func TestQueryTimeout(t *testing.T) {
+	cases := []struct {
+		c    Connection
+		want time.Duration
+	}{
+		{Connection{}, 0},
+		{Connection{Env: EnvProd}, DefaultProdTimeout},
+		{Connection{Env: EnvProd, StatementTimeout: "0"}, 0},
+		{Connection{Env: EnvProd, StatementTimeout: "off"}, 0},
+		{Connection{Env: EnvDev, StatementTimeout: "2m"}, 2 * time.Minute},
+		{Connection{StatementTimeout: "45"}, 45 * time.Second},
+		{Connection{StatementTimeout: "1.5"}, 1500 * time.Millisecond},
+		{Connection{Env: EnvProd, StatementTimeout: "bogus"}, DefaultProdTimeout},
+	}
+	for _, c := range cases {
+		if got := c.c.QueryTimeout(); got != c.want {
+			t.Errorf("%+v: got %v want %v", c.c, got, c.want)
+		}
+	}
+	for _, bad := range []string{"-1", "-5s", "soon"} {
+		if _, err := ParseTimeout(bad); err == nil {
+			t.Errorf("ParseTimeout(%q) accepted", bad)
+		}
+	}
+}
+
+func TestFavoritesRoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+	f, err := s.LoadFavorites()
+	if err != nil || len(f) != 0 {
+		t.Fatalf("empty: %v %v", f, err)
+	}
+	users := Favorite{Database: "app", Schema: "public", Name: "users", Kind: "table"}
+	paid := Favorite{Database: "app", Schema: "public", Name: "orders", Kind: "table", Where: "status = 'paid'", OrderBy: "id", Desc: true}
+	if !f.Toggle("c1", users) || !f.Toggle("c1", paid) || !f.Toggle("c2", users) {
+		t.Fatal("toggle add")
+	}
+	if err := s.SaveFavorites(f); err != nil {
+		t.Fatal(err)
+	}
+	g, err := s.LoadFavorites()
+	if err != nil || len(g["c1"]) != 2 || g["c1"][1] != paid || !g["c1"][1].IsView() || g["c1"][0].IsView() {
+		t.Fatalf("load: %+v %v", g, err)
+	}
+	if g.Toggle("c2", users) || len(g["c2"]) != 0 {
+		t.Fatal("toggle remove")
+	}
+	_ = s.SaveFavorites(g)
+	h, _ := s.LoadFavorites()
+	if _, ok := h["c2"]; ok {
+		t.Fatal("empty lists should be dropped")
+	}
+	if fi, _ := os.Stat(s.FavoritesPath()); fi.Mode().Perm() != 0o600 {
+		t.Fatalf("perm %v", fi.Mode().Perm())
 	}
 }

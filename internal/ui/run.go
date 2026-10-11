@@ -13,8 +13,10 @@ import (
 	"github.com/farvisun/squi/internal/config"
 	"github.com/farvisun/squi/internal/db"
 	"github.com/farvisun/squi/internal/db/clickhouse"
+	"github.com/farvisun/squi/internal/db/mssql"
 	"github.com/farvisun/squi/internal/db/mysql"
 	"github.com/farvisun/squi/internal/db/postgres"
+	"github.com/farvisun/squi/internal/db/sqlite"
 	"github.com/farvisun/squi/internal/history"
 	"github.com/farvisun/squi/internal/sqltext"
 )
@@ -25,6 +27,7 @@ type runOpts struct {
 	replace *resultPanel  // re-run: replace this panel
 	useDB   string        // switch database first (pg cross-db)
 	src     string        // editor text the statements came from (error positions)
+	nav     *navState     // browse state of the new panel (nil: keep the replaced one's)
 }
 
 type stmtResult struct {
@@ -149,6 +152,7 @@ func (m *Model) startRun(t *tab, stmts []sqltext.Statement, opts runOpts) tea.Cm
 		fetch = t.ac.cfg.FetchSize
 	}
 	manual := t.manualTx
+	timeout := t.queryTimeout()
 	hist := m.history
 	cfg := t.ac.cfg
 	d := t.ac.driver()
@@ -172,7 +176,7 @@ func (m *Model) startRun(t *tab, stmts []sqltext.Statement, opts runOpts) tea.Cm
 					break
 				}
 			}
-			res := runOne(s, st, fetch, i == len(stmts)-1, t)
+			res := runOne(s, st, fetch, timeout, i == len(stmts)-1, t)
 			if hist != nil {
 				e := history.Entry{Time: time.Now(), ConnID: cfg.ID, ConnName: cfg.Title(), Database: s.CurrentDatabase(),
 					SQL: st.SQL, DurationMS: res.elapsed.Milliseconds(), Rows: int64(len(res.rows))}
@@ -194,14 +198,19 @@ func (m *Model) startRun(t *tab, stmts []sqltext.Statement, opts runOpts) tea.Cm
 }
 
 // runOne executes a statement and fetches the first page. The stream stays
-// open (for lazy loading) only for the last statement of a run.
-func runOne(s db.Session, st sqltext.Statement, fetch int, last bool, t *tab) stmtResult {
+// open (for lazy loading) only for the last statement of a run. A statement
+// still running after timeout (> 0) is cancelled.
+func runOne(s db.Session, st sqltext.Statement, fetch int, timeout time.Duration, last bool, t *tab) stmtResult {
 	res := stmtResult{stmt: st}
 	ctx, cancel := context.WithCancel(context.Background())
 	start := time.Now()
+	wd := startWatchdog(s, timeout)
 	rs, err := s.Run(ctx, st.SQL)
 	if err != nil {
 		cancel()
+		if wd.stop() {
+			err = &timeoutError{after: timeout, err: err}
+		}
 		res.err, res.elapsed = err, time.Since(start)
 		return res
 	}
@@ -211,6 +220,9 @@ func runOne(s db.Session, st sqltext.Statement, fetch int, last bool, t *tab) st
 		n = 1
 	}
 	rows, err := rs.Next(n)
+	if wd.stop() && err != nil && !errors.Is(err, io.EOF) {
+		err = &timeoutError{after: timeout, err: err}
+	}
 	res.elapsed = time.Since(start)
 	res.rows = rows
 	if errors.Is(err, io.EOF) {
@@ -247,6 +259,7 @@ func (m *Model) handleRun(msg runMsg) tea.Cmd {
 	var lastPanel panel
 	var errs int
 	cancelled := false
+	var timedOut *timeoutError
 	resultN := 0
 	for _, r := range msg.results {
 		if r.err != nil {
@@ -254,6 +267,10 @@ func (m *Model) handleRun(msg runMsg) tea.Cmd {
 			text := r.err.Error()
 			if r.stmt.SQL != "" {
 				text = abbrev(oneLine(r.stmt.SQL), 120) + "\n" + text
+			}
+			if errors.As(r.err, &timedOut) {
+				t.out.msgs.log(logError, text)
+				continue
 			}
 			if isCancelled(r.err) {
 				cancelled = true
@@ -293,10 +310,24 @@ func (m *Model) handleRun(msg runMsg) tea.Cmd {
 			rp.source = singleTableSource(r.stmt.SQL, t)
 		}
 		if old := msg.opts.replace; old != nil {
-			rp.name, rp.source, rp.detail, rp.keyIdx = old.name, old.source, old.detail, old.keyIdx
+			if msg.opts.name == "" {
+				rp.name = old.name
+			}
+			if msg.opts.source == nil {
+				rp.source = old.source
+			}
+			if old.detail != nil && rp.source != nil && old.source != nil && *rp.source == *old.source {
+				rp.setDetail(old.detail)
+			}
+			rp.browse, rp.back = old.browse, old.back
 			t.out.replace(old, rp)
 		} else {
 			t.out.add(rp)
+		}
+		if msg.opts.nav != nil {
+			rp.applyNav(msg.opts.nav)
+		} else if rp.browse != nil {
+			rp.applyNav(&navState{browse: rp.browse, back: rp.back})
 		}
 		lastPanel = rp
 		more := ""
@@ -306,6 +337,10 @@ func (m *Model) handleRun(msg runMsg) tea.Cmd {
 		t.out.msgs.log(logInfo, fmt.Sprintf("%d%s rows — %s", len(r.rows), more, summary))
 	}
 	switch {
+	case timedOut != nil:
+		t.out.ix = 0
+		t.lastRun = "timed out"
+		cmds = append(cmds, m.toast("Statement timeout ("+fmtTimeout(timedOut.after)+") — cancelled; see :timeout", toastError))
 	case cancelled:
 		t.out.ix = 0
 		t.lastRun = "cancelled"
@@ -342,7 +377,7 @@ func isCancelled(err error) bool {
 	if errors.As(err, &ce) {
 		return ce.Code == clickhouse.CodeQueryCancelled
 	}
-	return errors.Is(err, context.Canceled)
+	return errors.Is(err, context.Canceled) || sqlite.IsInterrupted(err)
 }
 
 // errorOffset maps an engine error position to a byte offset in src.
@@ -362,6 +397,10 @@ func errorOffset(err error, st sqltext.Statement, src string) int {
 	var me *mysql.QueryError
 	if errors.As(err, &me) && me.Line > 0 && src != "" {
 		return sqltext.OffsetOf(src, st.Line+me.Line-1, 1)
+	}
+	var se *mssql.QueryError
+	if errors.As(err, &se) && se.Line > 0 && se.Proc == "" && src != "" {
+		return sqltext.OffsetOf(src, st.Line+se.Line-1, 1)
 	}
 	if st.SQL != "" {
 		return st.Start
@@ -436,16 +475,20 @@ func (m *Model) rerun(t *tab, r *resultPanel) tea.Cmd {
 }
 
 // openTableData shows the rows of a table in the current tab.
-func (m *Model) openTableData(ref db.ObjectRef) tea.Cmd {
+func (m *Model) openTableData(ref db.ObjectRef) tea.Cmd { return m.openBrowse(db.Browse{Ref: ref}) }
+
+// openBrowse shows a (filtered, sorted) view of a table in the current tab.
+func (m *Model) openBrowse(b db.Browse) tea.Cmd {
 	t := m.currentTab()
 	if t == nil {
 		return nil
 	}
-	opts := runOpts{name: ref.Name, source: &ref}
+	ref := b.Ref
+	opts := runOpts{name: ref.Name, source: &ref, nav: &navState{browse: &b}}
 	if t.ac.dialect().HasSchemas() && ref.Database != "" && ref.Database != t.db {
 		opts.useDB = ref.Database
 	}
-	sql := t.ac.dialect().SelectAll(ref, 0)
+	sql := t.ac.dialect().Select(b, 0)
 	m.focus = focusOutput
 	return m.startRun(t, []sqltext.Statement{{SQL: sql}}, opts)
 }
@@ -453,23 +496,29 @@ func (m *Model) openTableData(ref db.ObjectRef) tea.Cmd {
 // openTableInNewTab opens a new tab on the current connection with a SELECT
 // of ref in the editor and runs it.
 func (m *Model) openTableInNewTab(ref db.ObjectRef) tea.Cmd {
+	return m.openBrowseInNewTab(db.Browse{Ref: ref})
+}
+
+// openBrowseInNewTab is openTableInNewTab for a (filtered, sorted) view.
+func (m *Model) openBrowseInNewTab(b db.Browse) tea.Cmd {
 	cur := m.currentTab()
 	if cur == nil {
 		return nil
 	}
+	ref := b.Ref
 	t := m.createTab(cur.ac)
 	t.db = cur.db
 	if ref.Database != "" {
 		t.db = ref.Database
 	}
 	t.label = ref.Name
-	sql := t.ac.dialect().SelectAll(ref, 0)
+	sql := t.ac.dialect().Select(b, 0)
 	t.editor.SetValue(sql + ";")
 	if m.settings.VimMode && t.editor.Inserting() {
 		t.editor.Update(tea.KeyMsg{Type: tea.KeyEsc}) // ready for normal-mode keys
 	}
 	m.focus = focusOutput
-	return m.startRun(t, []sqltext.Statement{{SQL: sql}}, runOpts{name: ref.Name, source: &ref})
+	return m.startRun(t, []sqltext.Statement{{SQL: sql}}, runOpts{name: ref.Name, source: &ref, nav: &navState{browse: &b}})
 }
 
 // singleTableSource guesses the table behind "SELECT … FROM t [WHERE…]".
@@ -517,8 +566,7 @@ func singleTableSource(sql string, t *tab) *db.ObjectRef {
 		case tk.IsWord():
 			return tk.Text, true
 		case tk.Kind == sqltext.TokQuotedIdent:
-			q := tk.Text[0:1]
-			return strings.ReplaceAll(tk.Text[1:len(tk.Text)-1], q+q, q), true
+			return sqltext.UnquoteIdent(tk.Text), true
 		}
 		return "", false
 	}

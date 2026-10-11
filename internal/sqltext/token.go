@@ -17,14 +17,14 @@ const (
 	TokWhitespace  TokenKind = iota
 	TokComment               // -- …, # … (MySQL), /* … */ (incl. MySQL /*! … */)
 	TokKeyword               // keyword of the dialect (see IsKeyword)
-	TokIdent                 // unquoted identifier; also MySQL @var / @@var
-	TokQuotedIdent           // "ident" or `ident` (MySQL)
-	TokString                // '…', E'…', $tag$…$tag$, MySQL "…"
+	TokIdent                 // unquoted identifier; also @var / @@var (MySQL, SQL Server) and #temp (SQL Server)
+	TokQuotedIdent           // "ident", `ident` (MySQL, SQLite) or [ident] (SQL Server, SQLite)
+	TokString                // '…', E'…', $tag$…$tag$, MySQL "…", N'…'
 	TokNumber                // 42, 3.14, 1e10, 0xFF
 	TokOperator              // + - * / = <> :: || -> etc.
 	TokPunct                 // ( ) [ ] , ; .
-	TokParam                 // $1, ? (MySQL), :name
-	TokDelimiter             // MySQL "DELIMITER x" command or an occurrence of a custom delimiter
+	TokParam                 // $1, ? (MySQL, SQLite), ?1 / $name / @name (SQLite), :name
+	TokDelimiter             // MySQL "DELIMITER x" command or a custom delimiter; SQL Server GO batch separator
 )
 
 var tokenKindNames = [...]string{"whitespace", "comment", "keyword", "ident", "quoted-ident", "string", "number", "operator", "punct", "param", "delimiter"}
@@ -68,7 +68,7 @@ func (t Token) IsHint() bool {
 // reproduces src exactly. Unterminated strings and comments extend to the
 // end of the input.
 func Tokenize(src string, d db.DriverName) []Token {
-	l := lexer{src: src, driver: d, mysql: d.MySQLStyle(), delim: ";"}
+	l := lexer{src: src, driver: d, mysql: d.MySQLStyle(), mssql: d == db.SQLServer, sqlite: d == db.SQLite, delim: ";"}
 	var toks []Token
 	prevSig := -1
 	for l.pos < len(src) {
@@ -91,6 +91,8 @@ type lexer struct {
 	pos    int
 	driver db.DriverName
 	mysql  bool
+	mssql  bool
+	sqlite bool   // [ident], `ident`, ?NNN / $name / @name params, no E'' or $$ strings
 	delim  string // current MySQL client delimiter
 }
 
@@ -117,6 +119,12 @@ func (l *lexer) next() TokenKind {
 			return TokDelimiter
 		}
 	}
+	if l.mssql && (c == 'g' || c == 'G') && l.atLineStart() {
+		if n := parseGo(l.src[l.pos:]); n > 0 {
+			l.pos += n
+			return TokDelimiter
+		}
+	}
 	switch {
 	case isSpace(c):
 		for l.pos < len(l.src) && isSpace(l.src[l.pos]) {
@@ -135,6 +143,9 @@ func (l *lexer) next() TokenKind {
 	case c == '\'':
 		l.quoted('\'', l.mysql)
 		return TokString
+	case c == '[' && (l.mssql || l.sqlite):
+		l.quoted(']', false)
+		return TokQuotedIdent
 	case c == '"':
 		if l.mysql { // without ANSI_QUOTES, "…" is a string in MySQL
 			l.quoted('"', true)
@@ -142,10 +153,10 @@ func (l *lexer) next() TokenKind {
 		}
 		l.quoted('"', false)
 		return TokQuotedIdent
-	case c == '`' && l.mysql:
+	case c == '`' && (l.mysql || l.sqlite):
 		l.quoted('`', false)
 		return TokQuotedIdent
-	case (c == 'e' || c == 'E') && l.peek(1) == '\'' && !l.mysql:
+	case (c == 'e' || c == 'E') && l.peek(1) == '\'' && !l.mysql && !l.mssql && !l.sqlite:
 		l.pos++
 		l.quoted('\'', true)
 		return TokString
@@ -153,7 +164,7 @@ func (l *lexer) next() TokenKind {
 		l.pos++
 		l.quoted('\'', l.mysql)
 		return TokString
-	case (c == 'u' || c == 'U') && l.peek(1) == '&' && (l.peek(2) == '\'' || l.peek(2) == '"') && !l.mysql:
+	case (c == 'u' || c == 'U') && l.peek(1) == '&' && (l.peek(2) == '\'' || l.peek(2) == '"') && !l.mysql && !l.mssql && !l.sqlite:
 		q := l.peek(2)
 		l.pos += 2
 		l.quoted(q, false)
@@ -161,14 +172,29 @@ func (l *lexer) next() TokenKind {
 			return TokQuotedIdent
 		}
 		return TokString
-	case c == '$' && !l.mysql:
+	case (c == '$' || c == '@') && l.sqlite && isIdentStart(l.peek(1)):
+		l.pos++
+		l.identChars()
+		return TokParam
+	case c == '?' && l.sqlite:
+		for l.pos++; l.pos < len(l.src) && isDigit(l.src[l.pos]); l.pos++ {
+		}
+		return TokParam
+	case c == '$' && !l.mysql && !l.mssql && !l.sqlite:
 		return l.dollar()
 	case isDigit(c) || (c == '.' && isDigit(l.peek(1))):
 		l.number()
 		return TokNumber
-	case isIdentStart(c) || (c == '$' && l.mysql):
+	case isIdentStart(c) || (c == '$' && (l.mysql || l.mssql)):
 		return l.word()
-	case c == '@' && l.mysql && (isIdentChar(l.peek(1)) || l.peek(1) == '@'):
+	case c == '#' && l.mssql && (isIdentChar(l.peek(1)) || l.peek(1) == '#'):
+		l.pos++
+		if l.peek(0) == '#' {
+			l.pos++
+		}
+		l.identChars()
+		return TokIdent
+	case c == '@' && (l.mysql || l.mssql) && (isIdentChar(l.peek(1)) || l.peek(1) == '@'):
 		l.pos++
 		if l.peek(0) == '@' {
 			l.pos++
@@ -233,6 +259,41 @@ func parseDelimiterCommand(s string) (delim string, n int) {
 	return fields[0], len(line)
 }
 
+// parseGo returns the length of a SQL Server "GO [count]" batch separator
+// line at the start of s (up to, not including, the line break), or 0.
+func parseGo(s string) int {
+	if len(s) < 2 || !strings.EqualFold(s[:2], "go") {
+		return 0
+	}
+	end := strings.IndexByte(s, '\n')
+	if end < 0 {
+		end = len(s)
+	}
+	rest := strings.TrimSpace(s[2:end])
+	if rest != "" && strings.Trim(rest, "0123456789") != "" && !strings.HasPrefix(rest, "--") {
+		return 0
+	}
+	if rest != "" && rest[0] != '-' && (s[2] != ' ' && s[2] != '\t') {
+		return 0 // "GO5" is a word
+	}
+	return end
+}
+
+// UnquoteIdent returns the name denoted by a quoted identifier token:
+// "a""b", [a]]b], a MySQL backtick name or U&"…" (escapes are not decoded).
+func UnquoteIdent(text string) string {
+	text = strings.TrimPrefix(text, "U&")
+	if len(text) < 2 {
+		return strings.Trim(text, "\"`[]")
+	}
+	open, closer := text[:1], text[:1]
+	if open == "[" {
+		closer = "]"
+	}
+	text = strings.TrimSuffix(text[1:], closer)
+	return strings.ReplaceAll(text, closer+closer, closer)
+}
+
 func (l *lexer) lineComment() {
 	if i := strings.IndexByte(l.src[l.pos:], '\n'); i >= 0 {
 		l.pos += i
@@ -241,7 +302,8 @@ func (l *lexer) lineComment() {
 	}
 }
 
-// blockComment consumes /* … */; Postgres comments nest, MySQL ones do not.
+// blockComment consumes /* … */; Postgres comments nest, MySQL and SQLite
+// ones do not.
 func (l *lexer) blockComment() {
 	depth := 0
 	for l.pos < len(l.src) {
@@ -249,7 +311,7 @@ func (l *lexer) blockComment() {
 		case l.src[l.pos] == '/' && l.peek(1) == '*':
 			depth++
 			l.pos += 2
-			if l.mysql && depth > 1 {
+			if (l.mysql || l.sqlite) && depth > 1 {
 				depth = 1
 			}
 		case l.src[l.pos] == '*' && l.peek(1) == '/':

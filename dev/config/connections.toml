@@ -42,6 +42,25 @@ user = "squi"
 database = "squi"
 env = "dev"
 
+[[connection]]
+id = "dev-sqlserver"
+name = "dev-sqlserver"
+driver = "sqlserver"
+host = "127.0.0.1"
+port = 14339
+user = "squi"
+database = "squi"
+env = "dev"
+
+# SQLite playground file (make dev-sqlite); the path is relative to the
+# directory squi is started from.
+[[connection]]
+id = "dev-sqlite"
+name = "dev-sqlite"
+driver = "sqlite"
+database = "dev/squi.db"
+env = "local"
+
 # Postgres reached through bastion1 with the dev key.
 [[connection]]
 id = "dev-pg-ssh"
@@ -88,6 +107,25 @@ port = 8123
 user = "squi"
 database = "squi"
 env = "staging"
+[connection.ssh]
+enabled = true
+host = "127.0.0.1"
+port = 22222
+user = "squi"
+auth = "key"
+key_path = "dev/keys/id_ed25519"
+
+# SQL Server reached through bastion1 with the dev key; DNS is resolved on
+# the bastion.
+[[connection]]
+id = "dev-sqlserver-ssh"
+name = "sqlserver via ssh (key)"
+driver = "sqlserver"
+host = "sqlserver"
+port = 1433
+user = "squi"
+database = "squi"
+env = "prod"
 [connection.ssh]
 enabled = true
 host = "127.0.0.1"

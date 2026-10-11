@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>A fast, keyboard-driven SQL client for your terminal.</strong><br>
-  PostgreSQL · MySQL · MariaDB · ClickHouse — over SSH, safe on production, one small binary.
+  PostgreSQL · MySQL · MariaDB · ClickHouse · SQL Server · SQLite — over SSH, safe on production, one small binary.
 </p>
 
 <p align="center">
@@ -27,16 +27,25 @@ server you reached over SSH.
 - **Query** in tabs with syntax highlighting, vim or standard keys, context-aware
   autocomplete, history and snippets. Run with `ctrl+enter`.
 - **Browse results** in a streaming grid: lazy loading, sort, filter, cell inspector,
-  copy as CSV / JSON / INSERT / Markdown.
+  copy as CSV / JSON / INSERT / Markdown or as a `WHERE` predicate.
+- **Navigate data**: filter and sort whole tables on the server, follow foreign keys
+  to the referenced row (`>`) and back to the rows referencing it (`<`), count rows
+  from cheap estimates, pin tables and filtered views as favourites.
 - **Edit data inline** — review the generated SQL, applied in one transaction.
 - **Connect through SSH** bastions, `~/.ssh/config` aliases and `ProxyJump` chains,
   with no local ports opened. Passwords live in the OS keychain.
 - **Stay safe on production**: read-only connections, typed confirmation for
-  destructive statements, a red status bar on `prod`, manual transactions.
+  destructive statements, a red status bar on `prod`, a statement timeout (30s by
+  default on `prod`), manual transactions.
 - **Import / export** CSV, TSV, JSON, SQL; **EXPLAIN** as a plan tree; **admin views**
   for sessions, variables, users and sizes.
 - **ClickHouse** over its HTTP interface — engines, sorting and partition keys,
   skipping indexes, parts and `EXPLAIN indexes = 1` included.
+- **SQL Server and Azure SQL** with `GO` batches and graphical-plan details, and
+  **SQLite** files — all in pure Go, so the binary stays static.
+- **Connect from a URL** (`squi --connect 'postgres://app@db/api?ssh=bastion'`),
+  with `${VAR}` references and password environment variables for headless servers.
+- **Make it yours**: rebind any key, format SQL, open the query in `$EDITOR`.
 - **Pick up where you left off** — tabs and queries are restored on the next start.
 
 ## Install
@@ -55,6 +64,8 @@ server you reached over SSH.
 ```sh
 squi                    # open the connection manager
 squi --connect prod-api # jump straight into a saved connection
+squi --connect 'mysql://root@127.0.0.1/shop'   # or a URL, never saved
+squi --connect ./app.db                        # or a SQLite file
 ```
 
 Press `ctrl+n` to add a connection, `ctrl+t` to test it, `ctrl+s` to save, then
@@ -76,7 +87,7 @@ and the full key reference.
 ## Development
 
 ```sh
-make dev-up   # Postgres, MySQL, MariaDB, ClickHouse and SSH bastions in Docker
+make dev-up   # Postgres, MySQL, MariaDB, ClickHouse, SQL Server and SSH bastions in Docker
 make dev      # run squi against them
 make test-integration
 ```

@@ -12,7 +12,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -57,11 +59,11 @@ type SSH struct {
 type Connection struct {
 	ID       string `toml:"id"`
 	Name     string `toml:"name"`
-	Driver   string `toml:"driver"` // postgres | mysql
+	Driver   string `toml:"driver"` // postgres | mysql | clickhouse | sqlserver | sqlite
 	Host     string `toml:"host"`
 	Port     int    `toml:"port"`
 	User     string `toml:"user"`
-	Database string `toml:"database,omitempty"`
+	Database string `toml:"database,omitempty"` // sqlite: the file path (no host or port)
 
 	SSLMode     string `toml:"ssl_mode,omitempty"`
 	SSLRootCert string `toml:"ssl_root_cert,omitempty"`
@@ -71,10 +73,29 @@ type Connection struct {
 	Env       Env  `toml:"env,omitempty"`
 	ReadOnly  bool `toml:"read_only,omitempty"`
 	FetchSize int  `toml:"fetch_size,omitempty"`
+	// Color overrides the environment colour of tabs and badges: a name
+	// (red, orange, yellow, green, cyan, blue, purple, magenta, gray) or
+	// "#rrggbb". Label adds a short tag, e.g. "EU", to tell connections of
+	// the same environment apart.
+	Color string `toml:"color,omitempty"`
+	Label string `toml:"label,omitempty"`
+	// StatementTimeout cancels statements that run longer, e.g. "30s" or
+	// "2m"; "0" disables it. Empty means the default for Env.
+	StatementTimeout string `toml:"statement_timeout,omitempty"`
 	// SavePassword stores the DB password in the OS keychain.
 	SavePassword bool `toml:"save_password,omitempty"`
+	// PasswordEnv names an environment variable holding the DB password;
+	// it takes precedence over the keychain.
+	PasswordEnv string `toml:"password_env,omitempty"`
+	// Params are extra driver parameters: Postgres connection keywords or
+	// runtime parameters (e.g. service, options), MySQL DSN parameters or
+	// session variables, ClickHouse settings. ${VAR} references expand.
+	Params map[string]string `toml:"params,omitempty"`
 
 	SSH SSH `toml:"ssh"`
+
+	// Transient marks a profile opened from a URL that is not saved.
+	Transient bool `toml:"-"`
 }
 
 // Title is the label shown in tabs and lists.
@@ -82,7 +103,52 @@ func (c Connection) Title() string {
 	if c.Name != "" {
 		return c.Name
 	}
+	if c.Driver == "sqlite" {
+		return filepath.Base(c.Database)
+	}
 	return fmt.Sprintf("%s@%s", c.User, c.Host)
+}
+
+// DefaultProdTimeout is the statement timeout of prod connections that do
+// not set one.
+const DefaultProdTimeout = 30 * time.Second
+
+// QueryTimeout returns how long a statement may run before it is cancelled;
+// 0 means no limit. An invalid setting falls back to the default.
+func (c Connection) QueryTimeout() time.Duration {
+	if c.StatementTimeout != "" {
+		if d, err := ParseTimeout(c.StatementTimeout); err == nil {
+			return d
+		}
+	}
+	if c.Env == EnvProd {
+		return DefaultProdTimeout
+	}
+	return 0
+}
+
+// ParseTimeout parses a statement timeout: a Go duration ("30s", "1m30s"),
+// a plain number of seconds, or "0" / "off" / "none" for no limit.
+func ParseTimeout(s string) (time.Duration, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	switch s {
+	case "0", "off", "none", "no":
+		return 0, nil
+	}
+	if n, err := strconv.ParseFloat(s, 64); err == nil {
+		if n < 0 {
+			return 0, fmt.Errorf("timeout %q is negative", s)
+		}
+		return time.Duration(n * float64(time.Second)), nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("timeout %q: use e.g. 30s, 2m or 0", s)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("timeout %q is negative", s)
+	}
+	return d, nil
 }
 
 // Settings are user preferences.
@@ -240,15 +306,24 @@ func normalize(c *Connection) {
 	if c.ID == "" {
 		c.ID = NewID()
 	}
-	if c.Driver == "" {
+	switch c.Driver {
+	case "":
 		c.Driver = "postgres"
+	case "mssql":
+		c.Driver = "sqlserver"
+	case "sqlite3":
+		c.Driver = "sqlite"
 	}
-	if c.Port == 0 {
+	if c.Driver == "sqlite" {
+		c.Port = 0 // a local file
+	} else if c.Port == 0 {
 		switch c.Driver {
 		case "mysql":
 			c.Port = 3306
 		case "clickhouse":
 			c.Port = 8123
+		case "sqlserver":
+			c.Port = 1433
 		default:
 			c.Port = 5432
 		}

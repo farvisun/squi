@@ -43,6 +43,9 @@ type Grid struct {
 	sortCol  int
 	sortDesc bool
 	filter   string
+	// markCol/markDesc show an ORDER BY applied by the server (-1 = none).
+	markCol  int
+	markDesc bool
 
 	// Overlay hooks used by inline editing.
 	CellValue func(row, col int) (db.Cell, CellState)
@@ -50,7 +53,7 @@ type Grid struct {
 }
 
 // NewGrid creates an empty grid.
-func NewGrid() *Grid { return &Grid{MaxColWidth: 40, sortCol: -1} }
+func NewGrid() *Grid { return &Grid{MaxColWidth: 40, sortCol: -1, markCol: -1} }
 
 // SetData replaces columns and rows.
 func (g *Grid) SetData(cols, types []string, rows [][]db.Cell) {
@@ -183,6 +186,17 @@ func (g *Grid) ToggleSort() {
 		g.sortCol = -1
 	}
 	g.rebuild()
+}
+
+// SetSortMark shows col as sorted (by the server) without reordering rows;
+// col < 0 clears the mark.
+func (g *Grid) SetSortMark(col int, desc bool) { g.markCol, g.markDesc = col, desc }
+
+// SetCursor moves the cursor to a row (in row coordinates) and column.
+func (g *Grid) SetCursor(row, col int) {
+	g.col = col
+	g.SetCursorRow(row)
+	g.clamp()
 }
 
 // SetSize sets the outer size.
@@ -341,8 +355,8 @@ func (g *Grid) View() string {
 	for _, c := range visCols {
 		w := g.widths[c]
 		name := g.Columns[c]
-		if c == g.sortCol {
-			if g.sortDesc {
+		if c == g.sortCol || (g.sortCol < 0 && c == g.markCol) {
+			if g.sortDesc || (g.sortCol < 0 && g.markDesc) {
 				name += "▼"
 			} else {
 				name += "▲"

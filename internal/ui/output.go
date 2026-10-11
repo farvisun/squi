@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/farvisun/squi/internal/ui/components"
+	"github.com/farvisun/squi/internal/ui/keymap"
 	"github.com/farvisun/squi/internal/ui/theme"
 )
 
@@ -97,14 +98,14 @@ func (o *output) results() []*resultPanel {
 }
 
 func (o *output) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
-	switch km.String() {
-	case "]":
+	switch m.keys.Action(keymap.Output, km.String()) {
+	case "output.next":
 		o.ix = (o.ix + 1) % len(o.panels)
 		return nil
-	case "[":
+	case "output.prev":
 		o.ix = (o.ix - 1 + len(o.panels)) % len(o.panels)
 		return nil
-	case "X":
+	case "output.close":
 		if p := o.current(); p != nil {
 			if r, ok := p.(*resultPanel); ok && r.dirty() {
 				return m.toast("Panel has unsaved edits (u to revert)", toastWarn)

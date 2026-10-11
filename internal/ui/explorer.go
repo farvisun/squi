@@ -9,8 +9,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/farvisun/squi/internal/config"
 	"github.com/farvisun/squi/internal/db"
 	"github.com/farvisun/squi/internal/ui/components"
+	"github.com/farvisun/squi/internal/ui/keymap"
 	"github.com/farvisun/squi/internal/ui/theme"
 )
 
@@ -23,6 +25,7 @@ const (
 	nObject
 	nColumn
 	nInfo
+	nFavorites // the pinned "★ Favorites" group above the databases
 )
 
 type node struct {
@@ -39,13 +42,14 @@ type node struct {
 	expanded bool
 	loaded   bool
 	loading  bool
+	fav      *config.Favorite // set on entries of the favorites group
 }
 
 func (n *node) ref() db.ObjectRef { return n.obj.Ref(n.database) }
 
 func (n *node) expandable() bool {
 	switch n.kind {
-	case nDatabase, nSchema, nGroup:
+	case nDatabase, nSchema, nGroup, nFavorites:
 		return true
 	case nObject:
 		k := n.obj.Kind
@@ -67,6 +71,9 @@ type explorer struct {
 	lastClick    int // row of the previous click (double-click detection)
 	lastClickAt  time.Time
 	clickToggled bool
+
+	favorites    []config.Favorite
+	favCollapsed bool
 }
 
 type explorerMsg struct {
@@ -203,10 +210,14 @@ func (e *explorer) apply(msg explorerMsg) tea.Cmd {
 		}
 		attach(nil, msg.children)
 		e.roots = msg.children
+		e.placeFavorites()
 		// expand the connection's default database
-		want := e.ac.cfg.Database
+		want := e.ac.database()
 		for _, r := range e.roots {
-			if r.database == want || (want == "" && len(e.roots) == 1) || (want == "" && r.database == e.ac.cfg.User) {
+			if r.kind != nDatabase {
+				continue
+			}
+			if r.database == want || (want == "" && len(msg.children) == 1) || (want == "" && r.database == e.ac.cfg.User) {
 				r.expanded = true
 				cmds = append(cmds, e.load(r))
 				break
@@ -221,10 +232,10 @@ func (e *explorer) apply(msg explorerMsg) tea.Cmd {
 			attach(p, msg.children)
 			p.children = msg.children
 			p.loaded = true
-			// auto-expand a single schema like "public"
+			// auto-expand a single schema or the default one ("public", "dbo")
 			if p.kind == nDatabase {
 				for _, c := range p.children {
-					if c.kind == nSchema && (c.schema == "public" || len(p.children) == 1) {
+					if c.kind == nSchema && (c.schema == e.ac.dialect().DefaultSchema() || len(p.children) == 1) {
 						c.expanded = true
 						cmds = append(cmds, e.load(c))
 					}
@@ -241,6 +252,72 @@ func (e *explorer) apply(msg explorerMsg) tea.Cmd {
 	}
 	e.rebuild()
 	return tea.Batch(cmds...)
+}
+
+// setFavorites replaces the pinned objects shown above the databases.
+func (e *explorer) setFavorites(favs []config.Favorite) {
+	e.favorites = favs
+	e.placeFavorites()
+	e.rebuild()
+}
+
+// placeFavorites (re)builds the favorites group at the top of the roots.
+func (e *explorer) placeFavorites() {
+	if len(e.roots) > 0 && e.roots[0].kind == nFavorites {
+		e.favCollapsed = !e.roots[0].expanded
+		e.roots = e.roots[1:]
+	}
+	if len(e.favorites) == 0 {
+		return
+	}
+	g := &node{kind: nFavorites, label: fmt.Sprintf("★ Favorites (%d)", len(e.favorites)), expanded: !e.favCollapsed, loaded: true}
+	d := e.ac.dialect()
+	for i := range e.favorites {
+		f := &e.favorites[i]
+		label := f.Name
+		switch {
+		case d.HasSchemas() && f.Schema != "" && f.Database != "" && f.Database != e.ac.database():
+			label = f.Database + "." + f.Schema + "." + f.Name
+		case d.HasSchemas() && f.Schema != "":
+			label = f.Schema + "." + f.Name
+		case f.Database != "":
+			label = f.Database + "." + f.Name
+		}
+		if f.IsView() {
+			label += " ⟨" + favViewLabel(*f) + "⟩"
+		}
+		kind := db.ObjectKind(f.Kind)
+		if kind == "" {
+			kind = db.KindTable
+		}
+		schema := f.Schema
+		if schema == "" && !d.HasSchemas() {
+			schema = f.Database
+		}
+		g.children = append(g.children, &node{kind: nObject, label: label, database: f.Database, schema: schema,
+			obj: db.Object{Schema: schema, Name: f.Name, Kind: kind}, parent: g, depth: 1, fav: f})
+	}
+	e.roots = append([]*node{g}, e.roots...)
+}
+
+func favViewLabel(f config.Favorite) string {
+	var parts []string
+	if f.Where != "" {
+		parts = append(parts, abbrev(f.Where, 40))
+	}
+	if f.OrderBy != "" {
+		parts = append(parts, "↕"+f.OrderBy+yesNo(f.Desc, " desc", ""))
+	}
+	return strings.Join(parts, " ")
+}
+
+// favBrowse is the browse state a favorite opens.
+func favBrowse(n *node) db.Browse {
+	b := db.Browse{Ref: n.ref(), Where: n.fav.Where}
+	if n.fav.OrderBy != "" {
+		b.Order = []db.Order{{Column: n.fav.OrderBy, Desc: n.fav.Desc}}
+	}
+	return b
 }
 
 func (e *explorer) rebuild() {
@@ -357,36 +434,64 @@ func (e *explorer) update(m *Model, km tea.KeyMsg) tea.Cmd {
 				}
 			}
 		}
-	case "t":
+	case "esc":
+		if e.filter != "" {
+			e.filter = ""
+			e.rebuild()
+		}
+		return nil
+	default:
+		return e.action(m, n, m.keys.Action(keymap.Explorer, k))
+	}
+	return nil
+}
+
+// action runs an explorer action on the selected node n.
+func (e *explorer) action(m *Model, n *node, act string) tea.Cmd {
+	switch act {
+	case "explorer.open_tab":
 		if n != nil && n.kind == nObject && n.expandable() {
+			if n.fav != nil && n.fav.IsView() {
+				return m.openBrowseInNewTab(favBrowse(n))
+			}
 			return m.openTableInNewTab(n.ref())
 		}
-	case "enter", "o":
+	case "explorer.pin":
+		if n != nil && n.kind == nObject {
+			if n.fav != nil {
+				return m.toggleFavorite(e.ac, *n.fav)
+			}
+			return m.toggleFavorite(e.ac, config.Favorite{Database: n.database, Schema: n.obj.Schema, Name: n.obj.Name, Kind: string(n.obj.Kind)})
+		}
+	case "explorer.open":
 		if n == nil {
 			return nil
 		}
 		if n.kind == nObject {
 			switch n.obj.Kind {
 			case db.KindTable, db.KindView, db.KindMatView:
+				if n.fav != nil && n.fav.IsView() {
+					return m.openBrowse(favBrowse(n))
+				}
 				return m.openTableData(n.ref())
 			default:
 				return m.showDDL(n.ref())
 			}
 		}
 		return e.toggle(n)
-	case "d":
+	case "explorer.details":
 		if n != nil && n.kind == nObject && n.expandable() {
 			return m.showDetail(n.ref())
 		}
-	case "D":
+	case "explorer.ddl":
 		if n != nil && n.kind == nObject {
 			return m.showDDL(n.ref())
 		}
-	case "s":
+	case "explorer.insert_select":
 		if n != nil && n.kind == nObject && n.expandable() {
 			return m.insertSelect(n.ref())
 		}
-	case "c", "y":
+	case "explorer.copy_name":
 		if n != nil && n.kind != nInfo {
 			name := n.label
 			if n.kind == nObject {
@@ -394,21 +499,21 @@ func (e *explorer) update(m *Model, km tea.KeyMsg) tea.Cmd {
 			}
 			return m.copy(name, "name")
 		}
-	case "x":
+	case "explorer.export":
 		if n != nil && n.kind == nObject && n.expandable() {
 			return m.exportTable(n.ref())
 		}
-	case "i":
+	case "explorer.import":
 		if n != nil && n.kind == nObject && n.obj.Kind == db.KindTable {
 			return m.importCSV(n.ref())
 		}
-	case "u":
+	case "explorer.use":
 		if n != nil {
 			return m.useDatabase(n.database, n.schema)
 		}
-	case "r", "f5":
+	case "explorer.refresh":
 		return e.refresh()
-	case "/":
+	case "explorer.filter":
 		pm := newPrompt("Filter objects", "", e.filter, false, func(v string) tea.Cmd {
 			e.filter = strings.TrimSpace(v)
 			e.ix = 0
@@ -416,11 +521,6 @@ func (e *explorer) update(m *Model, km tea.KeyMsg) tea.Cmd {
 			return nil
 		})
 		m.push(pm)
-	case "esc":
-		if e.filter != "" {
-			e.filter = ""
-			e.rebuild()
-		}
 	}
 	return nil
 }
@@ -448,6 +548,9 @@ func (e *explorer) click(m *Model, row, x int) tea.Cmd {
 		if n.kind == nObject {
 			switch n.obj.Kind {
 			case db.KindTable, db.KindView, db.KindMatView:
+				if n.fav != nil && n.fav.IsView() {
+					return m.openBrowseInNewTab(favBrowse(n))
+				}
 				return m.openTableInNewTab(n.ref())
 			default:
 				return m.showDDL(n.ref())
@@ -507,6 +610,8 @@ func (e *explorer) view(w, h int, focused bool, current string) string {
 			st = st.Foreground(theme.Purple)
 		case nGroup:
 			st = theme.Dim
+		case nFavorites:
+			st = st.Foreground(theme.Yellow).Bold(true)
 		case nObject:
 			switch n.obj.Kind {
 			case db.KindView, db.KindMatView:

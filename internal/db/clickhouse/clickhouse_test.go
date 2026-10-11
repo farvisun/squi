@@ -151,6 +151,17 @@ func TestClickHouse(t *testing.T) {
 		t.Fatalf("version %q", c.ServerVersion())
 	}
 
+	t.Run("EstimateRows", func(t *testing.T) {
+		est := c.(db.RowEstimator)
+		n, exact, ok, err := est.EstimateRows(ctx, db.ObjectRef{Database: "squi", Name: "users"})
+		if err != nil || !ok || !exact || n != 500 {
+			t.Fatalf("users: n=%d exact=%v ok=%v err=%v", n, exact, ok, err)
+		}
+		if _, _, ok, err := est.EstimateRows(ctx, db.ObjectRef{Database: "squi", Name: "paid_orders"}); err != nil || ok {
+			t.Fatalf("view: ok=%v err=%v", ok, err)
+		}
+	})
+
 	t.Run("Catalog", func(t *testing.T) {
 		dbs, err := c.Databases(ctx)
 		if err != nil {

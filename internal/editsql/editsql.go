@@ -54,7 +54,7 @@ var (
 // Generate returns one statement per change, in the given order, without
 // trailing semicolons. Values are rendered as quoted literals (Postgres
 // resolves them against the column type, MySQL coerces). MySQL UPDATE and
-// DELETE statements get LIMIT 1 as a safety net.
+// DELETE statements get LIMIT 1 as a safety net, SQL Server ones TOP (1).
 func Generate(d db.Dialect, table db.ObjectRef, changes []Change) ([]string, error) {
 	if table.Name == "" {
 		return nil, ErrNoTable
@@ -106,7 +106,7 @@ func generate(d db.Dialect, target string, c Change) (string, error) {
 		if len(c.Cols) == 0 {
 			return "", ErrNoColumns
 		}
-		b.WriteString("UPDATE " + target + " SET ")
+		b.WriteString("UPDATE " + top(d) + target + " SET ")
 		for i, col := range c.Cols {
 			if i > 0 {
 				b.WriteString(", ")
@@ -114,7 +114,7 @@ func generate(d db.Dialect, target string, c Change) (string, error) {
 			b.WriteString(d.QuoteIdent(col) + " = " + d.Value(c.Vals[i]))
 		}
 	case Delete:
-		b.WriteString("DELETE FROM " + target)
+		b.WriteString("DELETE " + top(d) + "FROM " + target)
 	default:
 		return "", fmt.Errorf("unknown change kind %d", c.Kind)
 	}
@@ -127,6 +127,13 @@ func generate(d db.Dialect, target string, c Change) (string, error) {
 		b.WriteString(" LIMIT 1")
 	}
 	return b.String(), nil
+}
+
+func top(d db.Dialect) string {
+	if d.Driver == db.SQLServer {
+		return "TOP (1) "
+	}
+	return ""
 }
 
 // whereKey renders " WHERE k1 = v1 AND k2 = v2" for the row's key.

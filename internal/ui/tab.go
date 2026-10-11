@@ -32,6 +32,11 @@ type tab struct {
 	inTx     bool
 	txSince  time.Time
 
+	// timeout overrides the connection's statement timeout when timeoutSet
+	// (the :timeout command).
+	timeout    time.Duration
+	timeoutSet bool
+
 	toClose []*openStream
 	lastRun string // summary of the last run for the status bar
 	label   string // optional name shown in the tab bar (e.g. the opened table)
@@ -56,7 +61,7 @@ func (s *openStream) closeNow() {
 
 func (t *tab) title() string {
 	name := t.ac.cfg.Title()
-	if t.db != "" && t.db != t.ac.cfg.Database {
+	if t.db != "" && t.db != t.ac.database() {
 		name += ":" + t.db
 	}
 	if t.label != "" {
@@ -67,14 +72,14 @@ func (t *tab) title() string {
 
 func (t *tab) completionContext() schema.Context {
 	ctx := schema.Context{Database: t.db}
-	if t.ac.dialect().HasSchemas() {
+	if d := t.ac.dialect(); d.HasSchemas() {
 		s := t.schema
 		if s == "" {
-			s = "public"
+			s = d.DefaultSchema()
 		}
 		ctx.SearchPath = []string{s}
-		if s != "public" {
-			ctx.SearchPath = append(ctx.SearchPath, "public")
+		if s != d.DefaultSchema() {
+			ctx.SearchPath = append(ctx.SearchPath, d.DefaultSchema())
 		}
 	} else {
 		ctx.SearchPath = []string{t.db}

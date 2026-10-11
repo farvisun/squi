@@ -119,3 +119,6 @@ func (t *TextView) View() string {
 	}
 	return PadLines(strings.Join(out, "\n"), t.width, t.height)
 }
+
+// Raw returns the unstyled text.
+func (v *TextView) Raw() string { return v.raw }

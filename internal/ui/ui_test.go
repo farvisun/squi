@@ -2,7 +2,9 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -45,10 +47,18 @@ func (c *fakeConn) AllColumns(context.Context, string, string) (map[string][]str
 	return map[string][]string{"users": {"id", "email"}}, nil
 }
 func (c *fakeConn) TableDetail(_ context.Context, ref db.ObjectRef) (*db.TableDetail, error) {
-	return &db.TableDetail{Ref: ref, Columns: []db.Column{{Name: "id", Type: "int", IsPK: true}, {Name: "email", Type: "text", Nullable: true}}}, nil
+	if ref.Name == "orders" {
+		return &db.TableDetail{Ref: ref,
+			Columns: []db.Column{{Name: "id", Type: "int", IsPK: true}, {Name: "user_id", Type: "int"}, {Name: "total", Type: "numeric"}},
+			ForeignKeys: []db.ForeignKey{{Name: "orders_user_fk", Schema: "public", Table: "orders", Columns: []string{"user_id"},
+				RefSchema: "public", RefTable: "users", RefColumns: []string{"id"}}}}, nil
+	}
+	return &db.TableDetail{Ref: ref, Columns: []db.Column{{Name: "id", Type: "int", IsPK: true}, {Name: "email", Type: "text", Nullable: true}},
+		ReferencedBy: []db.ForeignKey{{Name: "orders_user_fk", Schema: "public", Table: "orders", Columns: []string{"user_id"},
+			RefSchema: "public", RefTable: "users", RefColumns: []string{"id"}}}}, nil
 }
 func (c *fakeConn) NewSession(context.Context, string) (db.Session, error) {
-	return &fakeSession{conn: c}, nil
+	return &fakeSession{conn: c, cancelled: make(chan struct{})}, nil
 }
 
 func (c *fakeConn) statements() []string {
@@ -60,6 +70,9 @@ func (c *fakeConn) statements() []string {
 type fakeSession struct {
 	conn *fakeConn
 	inTx bool
+
+	cancelOnce sync.Once
+	cancelled  chan struct{} // closed by Cancel; "SELECT pg_sleep" waits for it
 }
 
 func (s *fakeSession) Run(_ context.Context, sql string) (db.ResultStream, error) {
@@ -71,6 +84,21 @@ func (s *fakeSession) Run(_ context.Context, sql string) (db.ResultStream, error
 		s.inTx = true
 	case sqltext.TxCommit, sqltext.TxRollback:
 		s.inTx = false
+	}
+	if strings.Contains(sql, "pg_sleep") {
+		select {
+		case <-s.cancelled:
+			return nil, errors.New("canceling statement due to user request")
+		case <-time.After(5 * time.Second):
+			return &fakeStream{}, nil
+		}
+	}
+	if strings.HasPrefix(strings.ToUpper(sql), "SELECT") && strings.Contains(sql, "orders") {
+		rows := make([][]db.Cell, 30)
+		for i := range rows {
+			rows[i] = []db.Cell{db.Text(strconv.Itoa(i + 1)), db.Text("7"), db.Text("9.50")}
+		}
+		return &fakeStream{cols: []db.ResultColumn{{Name: "id", Type: "int"}, {Name: "user_id", Type: "int"}, {Name: "total", Type: "numeric"}}, rows: rows}, nil
 	}
 	if strings.HasPrefix(strings.ToUpper(sql), "SELECT") {
 		rows := make([][]db.Cell, 2500)
@@ -87,8 +115,11 @@ func (s *fakeSession) Rollback(ctx context.Context) error {
 	_, err := s.Run(ctx, "ROLLBACK")
 	return err
 }
-func (s *fakeSession) InTx() bool                                { return s.inTx }
-func (s *fakeSession) Cancel(context.Context) error              { return nil }
+func (s *fakeSession) InTx() bool { return s.inTx }
+func (s *fakeSession) Cancel(context.Context) error {
+	s.cancelOnce.Do(func() { close(s.cancelled) })
+	return nil
+}
 func (s *fakeSession) UseDatabase(context.Context, string) error { return nil }
 func (s *fakeSession) CurrentDatabase() string                   { return "app" }
 func (s *fakeSession) Close() error                              { return nil }

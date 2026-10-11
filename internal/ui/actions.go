@@ -149,9 +149,13 @@ func (m *Model) useDatabase(name, schemaName string) tea.Cmd {
 		err := s.UseDatabase(ctx, name)
 		if err == nil && schemaName != "" && t.ac.dialect().HasSchemas() {
 			t.schema = schemaName
-			if rs, e := s.Run(ctx, "SET search_path TO "+t.ac.dialect().QuoteIdent(schemaName)+", public"); e == nil {
-				_, _ = rs.Next(1)
-				_ = rs.Close()
+			// SQL Server has no session search path (the default schema is the
+			// user's): the schema only steers completion there
+			if t.ac.driver() == db.Postgres {
+				if rs, e := s.Run(ctx, "SET search_path TO "+t.ac.dialect().QuoteIdent(schemaName)+", public"); e == nil {
+					_, _ = rs.Next(1)
+					_ = rs.Close()
+				}
 			}
 		}
 		if err != nil {
@@ -694,6 +698,7 @@ func (m *Model) explain(t *tab, analyze bool) tea.Cmd {
 		return m.toast(t.ac.cfg.Driver+" has no EXPLAIN ANALYZE — F7 shows the plan", toastWarn)
 	}
 	write := sqltext.Classify(sql, t.ac.driver()).IsWrite()
+	timeout := t.queryTimeout()
 	run := func() tea.Cmd {
 		return m.op(t, "explaining", func(ctx context.Context, s db.Session) tea.Msg {
 			rollback := false
@@ -703,7 +708,11 @@ func (m *Model) explain(t *tab, analyze bool) tea.Cmd {
 				}
 				rollback = true
 			}
+			wd := startWatchdog(s, timeout)
 			plan, err := s.Explain(ctx, sql, analyze)
+			if wd.stop() && err != nil {
+				err = &timeoutError{after: timeout, err: err}
+			}
 			if rollback {
 				_ = s.Rollback(ctx)
 			}
@@ -749,7 +758,7 @@ func (m *Model) txAction(t *tab, what string) tea.Cmd {
 
 func (m *Model) txMenu(t *tab) tea.Cmd {
 	if !t.ac.dialect().Transactions() {
-		return m.toast("ClickHouse has no transactions: every statement applies immediately", toastWarn)
+		return m.toast(t.ac.cfg.Driver+" has no transactions: every statement applies immediately", toastWarn)
 	}
 	item := func(key, label, v string) menuItem {
 		return menuItem{key: key, label: label, run: func() tea.Cmd { return m.txChoice(t, v) }}

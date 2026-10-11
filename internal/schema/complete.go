@@ -117,7 +117,7 @@ func Complete(src string, cursor int, c *Cache, ctx Context) Completion {
 		cp.member(before)
 	case cp.isTableContext(before):
 		cp.tables()
-	case n > 0 && before[n-1].Upper() == "USE" && d.MySQLStyle():
+	case n > 0 && before[n-1].Upper() == "USE" && (d.MySQLStyle() || d == db.SQLServer):
 		cp.databases()
 	case n > 0 && cp.isExprContext(before[n-1]):
 		cp.columns()
@@ -154,6 +154,9 @@ func statementTokens(toks []sqltext.Token, cursor int) []sqltext.Token {
 func quotedPrefix(text string, closed bool) string {
 	text = strings.TrimPrefix(text, "U&")
 	q := text[:1]
+	if q == "[" {
+		q = "]"
+	}
 	text = text[1:]
 	if closed {
 		text = strings.TrimSuffix(text, q)
@@ -272,7 +275,7 @@ func (cp *completer) searchPath() []string {
 		}
 		return []string{cp.ctx.Database}
 	}
-	return []string{"public"}
+	return []string{cp.d.DefaultSchema()}
 }
 
 // location maps a qualifier to the cache's (database, schema) pair.

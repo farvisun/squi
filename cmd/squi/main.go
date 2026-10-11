@@ -21,7 +21,7 @@ var version = "dev"
 func main() {
 	var (
 		configDir = flag.String("config", "", "config directory (default $XDG_CONFIG_HOME/squi)")
-		connect   = flag.String("connect", "", "open the named connection at startup")
+		connect   = flag.String("connect", "", "open a saved connection (by name) or a connection URL at startup")
 		noMouse   = flag.Bool("no-mouse", false, "disable mouse support (keeps native terminal selection)")
 		showVer   = flag.Bool("version", false, "print version and exit")
 	)

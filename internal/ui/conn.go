@@ -13,8 +13,10 @@ import (
 	"github.com/farvisun/squi/internal/config"
 	"github.com/farvisun/squi/internal/db"
 	"github.com/farvisun/squi/internal/db/clickhouse" // registers the driver
-	_ "github.com/farvisun/squi/internal/db/mysql"    // register driver
+	"github.com/farvisun/squi/internal/db/mssql"
+	_ "github.com/farvisun/squi/internal/db/mysql" // register driver
 	_ "github.com/farvisun/squi/internal/db/postgres"
+	_ "github.com/farvisun/squi/internal/db/sqlite"
 	"github.com/farvisun/squi/internal/schema"
 	"github.com/farvisun/squi/internal/secrets"
 	"github.com/farvisun/squi/internal/sshx"
@@ -36,6 +38,15 @@ type activeConn struct {
 func (a *activeConn) dialect() db.Dialect { return a.conn.Dialect() }
 
 func (a *activeConn) driver() db.DriverName { return db.DriverName(a.cfg.Driver) }
+
+// database is the database new tabs start in: the profile's, except for
+// SQLite, whose profile names the file opened as "main".
+func (a *activeConn) database() string {
+	if a.driver() == db.SQLite {
+		return "main"
+	}
+	return a.cfg.Database
+}
 
 func (a *activeConn) close() {
 	if a.conn != nil {
@@ -80,7 +91,11 @@ func (c *connector) open(ctx context.Context, cfg config.Connection) (*activeCon
 	if !ok {
 		return nil, fmt.Errorf("unknown driver %q", cfg.Driver)
 	}
+	if cfg.Driver == string(db.SQLite) && cfg.SSH.Enabled {
+		return nil, errors.New("sqlite opens local files and cannot connect through SSH")
+	}
 	ac := &activeConn{cfg: cfg}
+	cfg = cfg.Expanded() // ${VAR} references; ac keeps the profile as written
 	var dial db.DialFunc
 	if cfg.SSH.Enabled {
 		t, err := sshx.Dial(ctx, sshx.Options{
@@ -99,6 +114,9 @@ func (c *connector) open(ctx context.Context, cfg config.Connection) (*activeCon
 		dial = t.DialContext
 	}
 	password := c.secret(cfg.ID, secrets.DBPassword)
+	if pw, ok := cfg.EnvPassword(); ok {
+		password = pw
+	}
 	prompted := false
 	for attempt := 0; ; attempt++ {
 		conn, err := drv.Open(ctx, connConfig(cfg, password), dial)
@@ -129,6 +147,9 @@ func (c *connector) open(ctx context.Context, cfg config.Connection) (*activeCon
 }
 
 func connConfig(cfg config.Connection, password string) db.ConnConfig {
+	if cfg.Driver == string(db.SQLite) {
+		cfg.Database = expandHome(cfg.Database)
+	}
 	return db.ConnConfig{
 		Host:        cfg.Host,
 		Port:        cfg.Port,
@@ -140,6 +161,7 @@ func connConfig(cfg config.Connection, password string) db.ConnConfig {
 		SSLCert:     expandHome(cfg.SSLCert),
 		SSLKey:      expandHome(cfg.SSLKey),
 		ReadOnly:    cfg.ReadOnly,
+		Params:      cfg.Params,
 		Timeout:     15 * time.Second,
 	}
 }
@@ -156,6 +178,9 @@ func isAuthError(err error) bool {
 	var ce *clickhouse.QueryError
 	if errors.As(err, &ce) {
 		return ce.Code == clickhouse.CodeAuthFailed || ce.Code == clickhouse.CodeRequiredPassword
+	}
+	if mssql.IsAuthError(err) {
+		return true
 	}
 	s := err.Error()
 	return strings.Contains(s, "password authentication failed") || strings.Contains(s, "no password supplied") ||
@@ -176,6 +201,9 @@ func isUnknownDatabase(err error) bool {
 	var ce *clickhouse.QueryError
 	if errors.As(err, &ce) {
 		return ce.Code == clickhouse.CodeUnknownDatabase
+	}
+	if mssql.IsUnknownDatabase(err) {
+		return true
 	}
 	s := err.Error()
 	return strings.Contains(s, "SQLSTATE 3D000") || strings.Contains(s, "Unknown database")

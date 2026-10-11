@@ -17,6 +17,8 @@ const (
 	Postgres   DriverName = "postgres"
 	MySQL      DriverName = "mysql"
 	ClickHouse DriverName = "clickhouse"
+	SQLServer  DriverName = "sqlserver"
+	SQLite     DriverName = "sqlite"
 )
 
 // MySQLStyle reports engines with MySQL's SQL surface: databases instead of
@@ -100,6 +102,13 @@ type Session interface {
 	// INSERTs for MySQL). Values are text; Null cells become NULL.
 	BulkInsert(ctx context.Context, ref ObjectRef, columns []string, rows [][]Cell) (int64, error)
 	Close() error
+}
+
+// RowEstimator is implemented by connections that can cheaply estimate a
+// table's row count from statistics (no table scan). ok is false when the
+// server has no estimate (e.g. a view, or a table never analyzed).
+type RowEstimator interface {
+	EstimateRows(ctx context.Context, ref ObjectRef) (n int64, exact, ok bool, err error)
 }
 
 // Cell is a single value in its text representation.
@@ -322,7 +331,21 @@ type Dialect struct {
 }
 
 // HasSchemas reports whether the engine has a schema level below databases.
-func (d Dialect) HasSchemas() bool { return d.Driver == Postgres }
+func (d Dialect) HasSchemas() bool { return d.Driver == Postgres || d.Driver == SQLServer }
+
+// DefaultSchema is the schema unqualified names resolve to by default
+// ("public", "dbo"), or "" for engines without schemas.
+func (d Dialect) DefaultSchema() string {
+	switch d.Driver {
+	case Postgres:
+		return "public"
+	case SQLServer:
+		return "dbo"
+	case SQLite:
+		return "main"
+	}
+	return ""
+}
 
 // Transactions reports whether the engine supports BEGIN/COMMIT/ROLLBACK.
 func (d Dialect) Transactions() bool { return d.Driver != ClickHouse }
@@ -331,6 +354,9 @@ func (d Dialect) Transactions() bool { return d.Driver != ClickHouse }
 func (d Dialect) QuoteIdent(s string) string {
 	if d.Driver.MySQLStyle() {
 		return "`" + strings.ReplaceAll(s, "`", "``") + "`"
+	}
+	if d.Driver == SQLServer {
+		return "[" + strings.ReplaceAll(s, "]", "]]") + "]"
 	}
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
@@ -344,7 +370,18 @@ func (d Dialect) QuoteLiteral(s string) string {
 		r := strings.NewReplacer(`\`, `\\`, `'`, `''`, "\x00", `\0`, "\n", `\n`, "\r", `\r`, "\x1a", `\Z`)
 		return "'" + r.Replace(s) + "'"
 	}
-	if strings.Contains(s, `\`) {
+	if d.Driver == SQLServer {
+		// N'' only when needed: comparing an N'' literal with a varchar
+		// column can turn an index seek into a scan
+		q := "'" + strings.ReplaceAll(s, "'", "''") + "'"
+		for i := 0; i < len(s); i++ {
+			if s[i] >= 0x80 {
+				return "N" + q
+			}
+		}
+		return q
+	}
+	if strings.Contains(s, `\`) && d.Driver != SQLite {
 		return "E'" + strings.NewReplacer(`\`, `\\`, `'`, `''`).Replace(s) + "'"
 	}
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
@@ -373,11 +410,62 @@ func (d Dialect) Qualified(ref ObjectRef) string {
 
 // SelectAll returns a SELECT * … LIMIT n statement for ref.
 func (d Dialect) SelectAll(ref ObjectRef, limit int) string {
-	q := "SELECT * FROM " + d.Qualified(ref)
-	if limit > 0 {
+	return d.Select(Browse{Ref: ref}, limit)
+}
+
+// Order is one ORDER BY term.
+type Order struct {
+	Column string
+	Desc   bool
+}
+
+// Browse is a server-side view of a table's rows: an optional WHERE
+// condition (SQL typed by the user or generated, already checked) and an
+// ORDER BY.
+type Browse struct {
+	Ref   ObjectRef
+	Where string
+	Order []Order
+}
+
+// Select renders b as "SELECT * FROM … [WHERE (…)] [ORDER BY …] [LIMIT n]"
+// (SQL Server: SELECT TOP (n) *).
+func (d Dialect) Select(b Browse, limit int) string {
+	q := "SELECT * FROM " + d.Qualified(b.Ref)
+	if d.Driver == SQLServer && limit > 0 {
+		q = "SELECT TOP (" + itoa(limit) + ") * FROM " + d.Qualified(b.Ref)
+	}
+	if w := strings.TrimSpace(b.Where); w != "" {
+		q += " WHERE (" + w + ")"
+	}
+	if len(b.Order) > 0 {
+		terms := make([]string, len(b.Order))
+		for i, o := range b.Order {
+			terms[i] = d.QuoteIdent(o.Column)
+			if o.Desc {
+				terms[i] += " DESC"
+			}
+		}
+		q += " ORDER BY " + strings.Join(terms, ", ")
+	}
+	if limit > 0 && d.Driver != SQLServer {
 		q += " LIMIT " + itoa(limit)
 	}
 	return q
+}
+
+// Equals renders "col1 = v1 AND col2 = v2"; a NULL value compares with
+// IS NULL.
+func (d Dialect) Equals(cols []string, vals []Cell) string {
+	terms := make([]string, len(cols))
+	for i, c := range cols {
+		if vals[i].Null {
+			terms[i] = d.QuoteIdent(c) + " IS NULL"
+		} else {
+			terms[i] = d.QuoteIdent(c) + " = " + d.Value(vals[i])
+		}
+	}
+	return strings.Join(terms, " AND ")
 }
 
 func itoa(n int) string {
@@ -423,6 +511,10 @@ func DefaultPort(name DriverName) int {
 		return 3306
 	case ClickHouse:
 		return 8123 // HTTP interface
+	case SQLServer:
+		return 1433
+	case SQLite:
+		return 0 // a file
 	}
 	return 5432
 }

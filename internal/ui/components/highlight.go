@@ -33,6 +33,12 @@ func LexerFor(driver string) string {
 	if driver == "mysql" || driver == "clickhouse" {
 		return "mysql" // backtick identifiers, # comments
 	}
+	if driver == "sqlserver" {
+		return "tsql"
+	}
+	if driver == "sqlite" {
+		return "sql" // chroma has no SQLite lexer
+	}
 	return "postgresql"
 }
 

@@ -16,6 +16,26 @@ var (
 		LOCALTIMESTAMP NATURAL NOT NOTNULL NULL OFFSET ON ONLY OR ORDER OUTER OVERLAPS PLACING PRIMARY
 		REFERENCES RETURNING RIGHT SELECT SESSION_USER SIMILAR SOME SYMMETRIC TABLE TABLESAMPLE THEN TO
 		TRAILING TRUE UNION UNIQUE USER USING VARIADIC VERBOSE WHEN WHERE WINDOW WITH`)
+	mssqlReserved = wordSet(`ADD ALL ALTER AND ANY AS ASC AUTHORIZATION BACKUP BEGIN BETWEEN BREAK BROWSE BULK BY
+		CASCADE CASE CHECK CHECKPOINT CLOSE CLUSTERED COALESCE COLLATE COLUMN COMMIT COMPUTE CONSTRAINT
+		CONTAINS CONTAINSTABLE CONTINUE CONVERT CREATE CROSS CURRENT CURRENT_DATE CURRENT_TIME
+		CURRENT_TIMESTAMP CURRENT_USER CURSOR DATABASE DBCC DEALLOCATE DECLARE DEFAULT DELETE DENY DESC
+		DISK DISTINCT DISTRIBUTED DOUBLE DROP DUMP ELSE END ERRLVL ESCAPE EXCEPT EXEC EXECUTE EXISTS EXIT
+		EXTERNAL FETCH FILE FILLFACTOR FOR FOREIGN FREETEXT FREETEXTTABLE FROM FULL FUNCTION GOTO GRANT
+		GROUP HAVING HOLDLOCK IDENTITY IDENTITY_INSERT IDENTITYCOL IF IN INDEX INNER INSERT INTERSECT INTO
+		IS JOIN KEY KILL LEFT LIKE LINENO LOAD MERGE NATIONAL NOCHECK NONCLUSTERED NOT NULL NULLIF OF OFF
+		OFFSETS ON OPEN OPENDATASOURCE OPENQUERY OPENROWSET OPENXML OPTION OR ORDER OUTER OVER PERCENT
+		PIVOT PLAN PRECISION PRIMARY PRINT PROC PROCEDURE PUBLIC RAISERROR READ READTEXT RECONFIGURE
+		REFERENCES REPLICATION RESTORE RESTRICT RETURN REVERT REVOKE RIGHT ROLLBACK ROWCOUNT ROWGUIDCOL RULE
+		SAVE SCHEMA SECURITYAUDIT SELECT SEMANTICKEYPHRASETABLE SESSION_USER SET SETUSER SHUTDOWN SOME
+		STATISTICS SYSTEM_USER TABLE TABLESAMPLE TEXTSIZE THEN TO TOP TRAN TRANSACTION TRIGGER TRUNCATE
+		TRY_CONVERT TSEQUAL UNION UNIQUE UNPIVOT UPDATE UPDATETEXT USE USER VALUES VARYING VIEW WAITFOR
+		WHEN WHERE WHILE WITH WITHIN WRITETEXT`)
+	sqliteReserved = wordSet(`ADD ALL ALTER AND AS AUTOINCREMENT BETWEEN CASE CHECK COLLATE COMMIT CONSTRAINT
+		CREATE CROSS CURRENT_DATE CURRENT_TIME CURRENT_TIMESTAMP DEFAULT DEFERRABLE DELETE DISTINCT DROP
+		ELSE ESCAPE EXCEPT EXISTS FOREIGN FROM FULL GROUP HAVING IF IN INDEX INNER INSERT INTERSECT INTO IS
+		ISNULL JOIN LEFT LIMIT NATURAL NOT NOTHING NOTNULL NULL ON OR ORDER OUTER PRIMARY REFERENCES
+		RETURNING RIGHT SELECT SET TABLE THEN TO TRANSACTION UNION UNIQUE UPDATE USING VALUES WHEN WHERE`)
 	mysqlReserved = wordSet(`ADD ALL ALTER ANALYZE AND AS ASC BEFORE BETWEEN BIGINT BINARY BLOB BOTH BY CALL
 		CASCADE CASE CHANGE CHAR CHARACTER CHECK COLLATE COLUMN CONDITION CONSTRAINT CONTINUE CONVERT CREATE
 		CROSS CUME_DIST CURRENT_DATE CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR DATABASE DATABASES
@@ -46,6 +66,17 @@ var (
 		unix_timestamp from_unixtime curdate curtime group_concat json_extract json_object json_arrayagg
 		json_unquote concat_ws substring_index locate instr char_length last_insert_id uuid found_rows
 		format sha2`)
+	mssqlFuncs = strings.Fields(`getdate getutcdate sysdatetime sysutcdatetime sysdatetimeoffset dateadd datediff
+		datediff_big datepart datename datefromparts eomonth year month day format convert try_cast
+		try_convert isnull iif choose len datalength charindex patindex stuff string_agg string_split
+		concat_ws newid newsequentialid object_id object_name db_name schema_name scope_identity
+		json_value json_query json_modify openjson isjson count_big checksum hashbytes quotename
+		replicate reverse ltrim rtrim translate square sqrt power sign rand at_time_zone`)
+	sqliteFuncs = strings.Fields(`ifnull iif instr substr printf format date time datetime julianday
+		strftime unixepoch typeof quote hex unhex randomblob zeroblob random changes total_changes
+		last_insert_rowid glob char unicode group_concat total json json_extract json_object json_array
+		json_group_array json_group_object json_each json_tree json_type json_valid json_patch
+		json_insert json_set json_remove sqlite_version likelihood ltrim rtrim sign`)
 	clickhouseFuncs = strings.Fields(`if multiIf uniq uniqExact uniqCombined countIf sumIf avgIf any anyLast
 		argMax argMin groupArray groupUniqArray quantile quantiles median topK arrayJoin arrayMap
 		arrayFilter arrayExists has hasAny length empty notEmpty toDate toDateTime toDateTime64 toStartOfDay
@@ -71,19 +102,31 @@ func functions(d db.DriverName) []string {
 	if d == db.MySQL {
 		return append(commonFuncs[:len(commonFuncs):len(commonFuncs)], mysqlFuncs...)
 	}
+	if d == db.SQLServer {
+		return append(commonFuncs[:len(commonFuncs):len(commonFuncs)], mssqlFuncs...)
+	}
+	if d == db.SQLite {
+		return append(commonFuncs[:len(commonFuncs):len(commonFuncs)], sqliteFuncs...)
+	}
 	return append(commonFuncs[:len(commonFuncs):len(commonFuncs)], pgFuncs...)
 }
 
 // needsQuote reports whether name must be quoted to be used as an
 // identifier: Postgres folds unquoted names to lower case, so anything but
 // lower-case letters, digits, _ and $ needs quotes; reserved words always do.
+// MySQL, SQL Server and SQLite names are case-insensitive.
 func needsQuote(name string, d db.DriverName) bool {
 	if name == "" {
 		return true
 	}
-	reserved := pgReserved
-	if d.MySQLStyle() {
+	reserved, caseBlind := pgReserved, d.MySQLStyle() || d == db.SQLServer || d == db.SQLite
+	switch {
+	case d.MySQLStyle():
 		reserved = mysqlReserved
+	case d == db.SQLServer:
+		reserved = mssqlReserved
+	case d == db.SQLite:
+		reserved = sqliteReserved
 	}
 	if reserved[strings.ToUpper(name)] {
 		return true
@@ -98,7 +141,9 @@ func needsQuote(name string, d db.DriverName) bool {
 		case r == '_', r >= 'a' && r <= 'z':
 			digits = false
 		case r == '$' && i > 0:
-		case r >= 'A' && r <= 'Z' && d.MySQLStyle():
+		case (r == '@' || r == '#') && i == 0 && d == db.SQLServer:
+			return true // would read as a variable or temp table
+		case r >= 'A' && r <= 'Z' && caseBlind:
 			digits = false
 		case r >= 0x80:
 			digits = false

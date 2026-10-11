@@ -167,3 +167,6 @@ func (p *Picker) View() string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// Items returns all items (unfiltered).
+func (p *Picker) Items() []PickerItem { return p.items }

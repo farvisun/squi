@@ -19,6 +19,7 @@ import (
 	"github.com/farvisun/squi/internal/secrets"
 	"github.com/farvisun/squi/internal/termkeys"
 	"github.com/farvisun/squi/internal/ui/components"
+	"github.com/farvisun/squi/internal/ui/keymap"
 	"github.com/farvisun/squi/internal/ui/theme"
 )
 
@@ -50,13 +51,17 @@ type Options struct {
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	store     *config.Store
-	settings  config.Settings
-	conns     []config.Connection
+	store    *config.Store
+	settings config.Settings
+	conns    []config.Connection
+	// transient are unsaved profiles opened from a connection URL.
+	transient []config.Connection
 	connector *connector
 	bridge    *Bridge
 	history   *history.Store
 	snippets  []history.Snippet
+	favorites config.Favorites
+	keys      *keymap.Map
 
 	active     map[string]*activeConn
 	connecting map[string]bool
@@ -112,6 +117,11 @@ func New(o Options) (*Model, error) {
 	if err != nil {
 		m.startErr = err.Error()
 	}
+	keys, warns := keymap.New(st.Keys)
+	m.keys = keys
+	if len(warns) > 0 && m.startErr == "" {
+		m.startErr = strings.Join(warns, "; ")
+	}
 	m.spinner.Style = lipgloss.NewStyle().Foreground(theme.Accent)
 	if err := m.reloadConns(); err != nil {
 		return nil, err
@@ -123,6 +133,12 @@ func New(o Options) (*Model, error) {
 	}
 	if sn, err := history.LoadSnippets(o.Store.SnippetsPath()); err == nil {
 		m.snippets = sn
+	}
+	if fav, err := o.Store.LoadFavorites(); err == nil {
+		m.favorites = fav
+	} else {
+		m.favorites = config.Favorites{}
+		m.startErr = "favorites: " + err.Error()
 	}
 	if st.RestoreSession {
 		if sess, err := o.Store.LoadSession(); err == nil {
@@ -140,6 +156,18 @@ func (m *Model) reloadConns() error {
 	if err != nil {
 		return err
 	}
+	saved := map[string]bool{}
+	for _, c := range conns {
+		saved[c.ID] = true
+	}
+	kept := m.transient[:0]
+	for _, c := range m.transient {
+		if !saved[c.ID] { // saved from the form: now a regular profile
+			kept = append(kept, c)
+			conns = append(conns, c)
+		}
+	}
+	m.transient = kept
 	m.conns = conns
 	if m.mgr != nil {
 		m.mgr.reload(m)
@@ -171,7 +199,9 @@ func (m *Model) Init() tea.Cmd {
 	if len(restoring) > 0 && m.mgr != nil {
 		m.mgr.status = theme.Dim.Render(fmt.Sprintf("Restoring %d tab(s) from the last session…", len(m.pending)))
 	}
-	if m.autoConn != "" {
+	if m.autoConn != "" && config.IsURL(m.autoConn) {
+		cmds = append(cmds, m.connectURL(m.autoConn))
+	} else if m.autoConn != "" {
 		found := false
 		for _, c := range m.conns {
 			if strings.EqualFold(c.Name, m.autoConn) || c.ID == m.autoConn {
@@ -257,6 +287,38 @@ func (m *Model) connect(cfg config.Connection) tea.Cmd {
 	})
 }
 
+// connectURL opens an unsaved connection described by a URL. Its password,
+// if the URL has one, is kept in memory only.
+func (m *Model) connectURL(raw string) tea.Cmd {
+	cfg, pw, err := config.ParseURL(raw)
+	if err != nil {
+		return m.toast(err.Error(), toastError)
+	}
+	cfg.ID = config.NewID()
+	cfg.Transient = true
+	if pw != "" {
+		_ = m.connector.memory.Set(cfg.ID, secrets.DBPassword, pw)
+	}
+	m.transient = append(m.transient, cfg)
+	m.conns = append(m.conns, cfg)
+	if m.mgr != nil {
+		m.mgr.reload(m)
+	}
+	return m.connect(cfg)
+}
+
+// dropTransient forgets an unsaved URL profile.
+func (m *Model) dropTransient(id string) {
+	kept := m.transient[:0]
+	for _, c := range m.transient {
+		if c.ID != id {
+			kept = append(kept, c)
+		}
+	}
+	m.transient = kept
+	_ = m.reloadConns()
+}
+
 func (m *Model) newTab(ac *activeConn) tea.Cmd {
 	t := m.createTab(ac)
 	return m.op(t, "opening session", func(ctx context.Context, s db.Session) tea.Msg { return nil })
@@ -269,7 +331,7 @@ func (m *Model) createTab(ac *activeConn) *tab {
 		id:       m.nextTabID,
 		rank:     1<<20 + m.nextTabID,
 		ac:       ac,
-		db:       ac.cfg.Database,
+		db:       ac.database(),
 		editor:   components.NewEditor(m.settings.VimMode, components.LexerFor(ac.cfg.Driver)),
 		out:      newOutput(),
 		manualTx: m.settings.DefaultTxManual && ac.dialect().Transactions(),
@@ -356,6 +418,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		ac := msg.ac
 		ac.explorer = newExplorer(ac)
+		ac.explorer.favorites = m.favorites[ac.cfg.ID]
 		m.active[ac.cfg.ID] = ac
 		if m.mgr != nil {
 			m.mgr.status = ""
@@ -449,6 +512,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.out.add(p)
 		m.focus = focusOutput
 		return m, nil
+	case countMsg:
+		return m, m.handleCount(msg)
+	case externalEditMsg:
+		return m, m.handleExternalEdit(msg)
 	case txMsg:
 		if !m.hasTab(msg.tab) {
 			return m, nil
@@ -525,7 +592,7 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 	k := km.String()
-	if k == "ctrl+q" {
+	if m.keys.Has("quit", k) {
 		return m.quit()
 	}
 	if m.screen == screenConnections {
@@ -540,37 +607,44 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 		return m.windowKey(k)
 	}
 	inserting := m.focus == focusEditor && t != nil && t.editor.Inserting()
-	switch k {
-	case "f1":
+	act := m.keys.Action(keymap.Global, k)
+	if inserting && typingKey(k) {
+		act = "" // the key is text (or a word motion) while typing
+	}
+	switch act {
+	case "help":
 		return m.showHelp()
-	case "ctrl+o":
+	case "connections":
 		m.openConnections()
 		return nil
-	case "ctrl+p":
+	case "palette":
 		return m.palette()
-	case "ctrl+t":
+	case "new_tab":
 		return m.newTabPicker()
-	case "ctrl+w":
+	case "window":
 		m.winPrefix = true
 		return nil
-	case "alt+]", "ctrl+pgdown", "alt+right":
-		if len(m.tabs) > 0 && !(inserting && k == "alt+right") {
+	case "next_tab":
+		if len(m.tabs) > 0 {
 			m.cur = (m.cur + 1) % len(m.tabs)
 			return nil
 		}
-	case "alt+[", "ctrl+pgup", "alt+left":
-		if len(m.tabs) > 0 && !(inserting && k == "alt+left") {
+	case "prev_tab":
+		if len(m.tabs) > 0 {
 			m.cur = (m.cur - 1 + len(m.tabs)) % len(m.tabs)
 			return nil
 		}
-	case "ctrl+b":
+	case "toggle_explorer":
 		m.hideExplore = !m.hideExplore
 		if m.hideExplore && m.focus == focusExplorer {
 			m.focus = focusEditor
 		}
 		return nil
-	case "shift+tab":
+	case "focus_prev":
 		m.cycleFocus(-1)
+		return nil
+	case "focus_next":
+		m.cycleFocus(1)
 		return nil
 	}
 	if len(k) == 5 && strings.HasPrefix(k, "alt+") && k[4] >= '1' && k[4] <= '9' {
@@ -582,37 +656,30 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 	if t == nil {
 		return nil
 	}
-	switch k {
-	case "f5", "ctrl+j", "alt+enter":
+	switch act {
+	case "run":
 		return m.runCurrent(t)
-	case "f6":
+	case "run_all":
 		return m.runAll(t)
-	case "f7":
+	case "explain":
 		return m.explain(t, false)
-	case "f8":
+	case "analyze":
 		return m.explain(t, true)
-	case "ctrl+g":
+	case "external_editor":
+		return m.openExternalEditor(t)
+	case "tx_menu":
 		return m.txMenu(t)
-	case "ctrl+c":
+	case "cancel":
 		if t.busy {
 			return m.cancel(t)
 		}
-		if m.focus == focusEditor && !m.settings.VimMode {
+		if m.focus == focusEditor && !m.settings.VimMode && k == "ctrl+c" {
 			break // editor copies the selection
 		}
-		return m.toast("Nothing to cancel — ctrl+q quits", toastInfo)
-	case "?":
-		if !inserting {
-			return m.showHelp()
-		}
-	case ":":
-		if m.focus != focusEditor {
+		return m.toast("Nothing to cancel — "+m.keys.Display("quit")+" quits", toastInfo)
+	case "command_line":
+		if m.focus != focusEditor { // vim normal mode opens it from the editor
 			m.openCmdline("")
-			return nil
-		}
-	case "tab":
-		if !inserting {
-			m.cycleFocus(1)
 			return nil
 		}
 	}
@@ -633,9 +700,15 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// typingKey reports keys that are text, or editor motions, while the
+// editor is in insert mode, so global bindings must not take them.
+func typingKey(k string) bool {
+	return len([]rune(k)) == 1 || k == "tab" || k == "alt+left" || k == "alt+right"
+}
+
 func (o *output) hasFilter() bool {
 	if r, ok := o.current().(*resultPanel); ok {
-		return r.grid.Filter() != ""
+		return r.grid.Filter() != "" || (r.browse != nil && r.browse.Where != "")
 	}
 	return false
 }
@@ -658,6 +731,10 @@ func (m *Model) editorKey(t *tab, km tea.KeyMsg) tea.Cmd {
 		m.complete(t, false)
 	case components.ActCommand:
 		m.openCmdline("")
+	case components.ActExternal:
+		return m.openExternalEditor(t)
+	case components.ActFormat:
+		return m.formatSQL(t)
 	case components.ActYank:
 		return m.copy(t.editor.Register(), "text")
 	}
@@ -780,10 +857,10 @@ func (m *Model) quitNow() tea.Cmd {
 func (m *Model) newTabPicker() tea.Cmd {
 	var items []components.PickerItem
 	if t := m.currentTab(); t != nil {
-		items = append(items, components.PickerItem{Title: "New tab on " + t.ac.cfg.Title(), Badge: theme.EnvBadge(t.ac.cfg.Env), Value: t.ac.cfg})
+		items = append(items, components.PickerItem{Title: "New tab on " + t.ac.cfg.Title(), Badge: theme.ConnBadge(t.ac.cfg), Value: t.ac.cfg})
 	}
 	for _, c := range m.conns {
-		items = append(items, components.PickerItem{Title: c.Title(), Detail: c.Driver + " " + c.Host, Badge: theme.EnvBadge(c.Env), Value: c})
+		items = append(items, components.PickerItem{Title: c.Title(), Detail: c.Driver + " " + c.Host, Badge: theme.ConnBadge(c), Value: c})
 	}
 	m.push(newPickerModal("Open tab", items, func(it components.PickerItem) tea.Cmd {
 		return m.connect(it.Value.(config.Connection))
@@ -920,8 +997,8 @@ func (m *Model) tabLabel(i int, t *tab) string {
 	st := theme.InactiveTab
 	if i == m.cur {
 		st = theme.ActiveTab
-		if t.ac.cfg.Env != config.EnvNone {
-			st = st.Background(theme.EnvColor(t.ac.cfg.Env))
+		if t.ac.cfg.Env != config.EnvNone || t.ac.cfg.Color != "" {
+			st = st.Background(theme.ConnColor(t.ac.cfg))
 		}
 	} else if t.ac.cfg.Env == config.EnvProd {
 		st = st.Foreground(theme.Red)
@@ -1000,10 +1077,11 @@ func (m *Model) statusBar(t *tab) string {
 	}
 	seg := lipgloss.NewStyle().Background(bg).Foreground(fg)
 	var left []string
-	if badge := theme.EnvBadge(cfg.Env); badge != "" && cfg.Env != config.EnvProd {
+	if badge := theme.ConnBadge(cfg); badge != "" && cfg.Env != config.EnvProd {
 		left = append(left, badge)
 	} else if cfg.Env == config.EnvProd {
-		left = append(left, seg.Bold(true).Render(" PRODUCTION "))
+		// production stays red whatever the connection's colour
+		left = append(left, seg.Bold(true).Render(strings.TrimRight(" PRODUCTION "+cfg.Label, " ")+" "))
 	}
 	left = append(left, seg.Render(" "+cfg.Driver+" "+cfg.Title()))
 	if t.db != "" {
@@ -1018,6 +1096,9 @@ func (m *Model) statusBar(t *tab) string {
 	}
 	if cfg.ReadOnly {
 		left = append(left, seg.Bold(true).Render("· READ-ONLY"))
+	}
+	if d := t.queryTimeout(); d > 0 {
+		left = append(left, seg.Render("· ⏱ "+fmtTimeout(d)))
 	}
 	switch {
 	case t.inTx:
@@ -1038,7 +1119,7 @@ func (m *Model) statusBar(t *tab) string {
 		}
 		right = st.Render(" " + m.toastText + " ")
 	case t.busy:
-		right = seg.Render(fmt.Sprintf(" %s %s %s · ctrl+c cancel ", m.spinner.View(), t.busyWhat, fmtDuration(time.Since(t.busySince).Round(100*time.Millisecond))))
+		right = seg.Render(fmt.Sprintf(" %s %s %s · %s cancel ", m.spinner.View(), t.busyWhat, fmtDuration(time.Since(t.busySince).Round(100*time.Millisecond)), m.keys.First("cancel")))
 	case m.jobs > 0:
 		right = seg.Render(fmt.Sprintf(" %s %d background job(s) ", m.spinner.View(), m.jobs))
 	default:
@@ -1046,7 +1127,7 @@ func (m *Model) statusBar(t *tab) string {
 		if r, ok := t.out.current().(*resultPanel); ok {
 			hint = r.status()
 		}
-		right = seg.Render(" " + hint + " · F1 help ")
+		right = seg.Render(" " + hint + " · " + m.keys.First("help") + " help ")
 	}
 	l := strings.Join(left, seg.Render(" "))
 	gap := m.width - lipgloss.Width(l) - lipgloss.Width(right)

@@ -80,6 +80,24 @@ func runSuite(t *testing.T, env string) {
 	t.Run("BulkInsert", s.testBulkInsert)
 	t.Run("Admin", s.testAdmin)
 	t.Run("Dial", s.testDial)
+	t.Run("EstimateRows", s.testEstimateRows)
+}
+
+func (s *suite) testEstimateRows(t *testing.T) {
+	sess := s.session(t, s.c)
+	all(t, sess, "ANALYZE TABLE orders")
+	est := s.c.(db.RowEstimator)
+	ctx := context.Background()
+	n, _, ok, err := est.EstimateRows(ctx, db.ObjectRef{Database: s.cfg.Database, Schema: s.cfg.Database, Name: "orders"})
+	if err != nil || !ok || n <= 0 {
+		t.Fatalf("orders: n=%d ok=%v err=%v", n, ok, err)
+	}
+	if _, _, ok, err := est.EstimateRows(ctx, db.ObjectRef{Database: s.cfg.Database, Name: "paid_orders"}); err != nil || ok {
+		t.Fatalf("view: ok=%v err=%v", ok, err)
+	}
+	if _, _, ok, err := est.EstimateRows(ctx, db.ObjectRef{Database: s.cfg.Database, Name: "no_such_table"}); err != nil || ok {
+		t.Fatalf("missing: ok=%v err=%v", ok, err)
+	}
 }
 
 func (s *suite) open(cfg db.ConnConfig, dial db.DialFunc) db.Conn {

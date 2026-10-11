@@ -153,9 +153,10 @@ func (c *Cache) Invalidate(database string) {
 	delete(c.dbs, database)
 }
 
-// IsSystemSchema reports whether a Postgres schema holds catalog objects.
+// IsSystemSchema reports whether a Postgres or SQL Server schema holds
+// catalog objects.
 func IsSystemSchema(s string) bool {
-	return s == "pg_catalog" || s == "information_schema" || s == "pg_toast" ||
+	return s == "pg_catalog" || strings.EqualFold(s, "information_schema") || s == "pg_toast" || s == "sys" ||
 		strings.HasPrefix(s, "pg_temp_") || strings.HasPrefix(s, "pg_toast_temp_")
 }
 

@@ -7,7 +7,7 @@ import (
 	"github.com/farvisun/squi/internal/db"
 )
 
-// commonKeywords are keywords shared by Postgres and MySQL.
+// commonKeywords are keywords shared by all dialects.
 var commonKeywords = []string{
 	"ADD", "ALL", "ALTER", "ANALYZE", "AND", "ANY", "AS", "ASC", "BEGIN", "BETWEEN", "BOTH", "BY",
 	"CALL", "CASCADE", "CASE", "CAST", "CHECK", "COLLATE", "COLUMN", "COMMENT", "COMMIT", "CONSTRAINT",
@@ -44,7 +44,27 @@ var clickhouseKeywords = []string{
 	"TTL", "USE", "WATCH",
 }
 
+var mssqlKeywords = []string{
+	"APPLY", "BACKUP", "BREAK", "BROWSE", "BULK", "CATCH", "CHECKPOINT", "CLUSTERED", "CONTINUE",
+	"CONTAINS", "CURSOR", "DBCC", "DEALLOCATE", "DECLARE", "DENY", "DISTRIBUTED", "DUMP", "ERRLVL",
+	"EXEC", "EXIT", "FILLFACTOR", "FREETEXT", "GO", "GOTO", "HOLDLOCK", "IDENTITY", "IDENTITY_INSERT",
+	"INCLUDE", "KILL", "MATCHED", "MERGE", "NEXT", "NOCHECK", "NOCOUNT", "NOLOCK", "NONCLUSTERED", "OFF", "ONLY",
+	"OPENJSON", "OPENQUERY", "OPENROWSET", "OUTPUT", "PERCENT", "PIVOT", "PRINT", "PROC", "RAISERROR",
+	"READPAST", "RECONFIGURE", "RESTORE", "RETURN", "ROWCOUNT", "ROWLOCK", "SAVE", "SCHEMABINDING",
+	"SHUTDOWN", "STATISTICS", "TABLOCK", "TEXTSIZE", "THROW", "TIES", "TOP", "TRAN", "TRY", "TRY_CAST",
+	"TRY_CONVERT", "UNPIVOT", "UPDLOCK", "USE", "WAITFOR", "WHILE", "XACT_ABORT",
+}
+
+var sqliteKeywords = []string{
+	"ABORT", "AFTER", "ATTACH", "AUTOINCREMENT", "BEFORE", "CONFLICT", "DEFERRABLE", "DEFERRED", "DETACH",
+	"DO", "EACH", "EXCLUSIVE", "FILTER", "GLOB", "IGNORE", "IMMEDIATE", "INDEXED", "INITIALLY", "INSTEAD",
+	"ISNULL", "MATERIALIZED", "NOTHING", "NOTNULL", "NULLS", "PRAGMA", "RAISE", "RECURSIVE", "REGEXP",
+	"REINDEX", "RELEASE", "RETURNING", "TEMP", "TEMPORARY", "VACUUM", "VIRTUAL", "WITHOUT",
+}
+
 var (
+	sqliteKeywordSet     = keywordSet(commonKeywords, sqliteKeywords)
+	mssqlKeywordSet      = keywordSet(commonKeywords, mssqlKeywords)
 	pgKeywordSet         = keywordSet(commonKeywords, pgKeywords)
 	mysqlKeywordSet      = keywordSet(commonKeywords, mysqlKeywords)
 	clickhouseKeywordSet = keywordSet(commonKeywords, clickhouseKeywords)
@@ -62,13 +82,18 @@ func keywordSet(lists ...[]string) map[string]bool {
 
 // IsKeyword reports whether word (any case) is a keyword of dialect d.
 func IsKeyword(word string, d db.DriverName) bool {
-	if d == db.ClickHouse {
-		return clickhouseKeywordSet[strings.ToUpper(word)]
+	w := strings.ToUpper(word)
+	switch d {
+	case db.ClickHouse:
+		return clickhouseKeywordSet[w]
+	case db.MySQL:
+		return mysqlKeywordSet[w]
+	case db.SQLServer:
+		return mssqlKeywordSet[w]
+	case db.SQLite:
+		return sqliteKeywordSet[w]
 	}
-	if d == db.MySQL {
-		return mysqlKeywordSet[strings.ToUpper(word)]
-	}
-	return pgKeywordSet[strings.ToUpper(word)]
+	return pgKeywordSet[w]
 }
 
 // Keywords returns the sorted, upper-case keyword list of a dialect.
@@ -79,6 +104,10 @@ func Keywords(d db.DriverName) []string {
 		extra = mysqlKeywords
 	case db.ClickHouse:
 		extra = clickhouseKeywords
+	case db.SQLServer:
+		extra = mssqlKeywords
+	case db.SQLite:
+		extra = sqliteKeywords
 	}
 	out := append(slices.Clone(commonKeywords), extra...)
 	slices.Sort(out)

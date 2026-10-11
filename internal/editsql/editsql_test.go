@@ -45,6 +45,13 @@ func TestGenerate(t *testing.T) {
 			"DELETE FROM `shop`.`users` WHERE `a` = '1' AND `b` = '2' LIMIT 1",
 			"UPDATE `shop`.`users` SET `path` = 'C:\\\\tmp' WHERE `Id` = '1' LIMIT 1",
 		}},
+		{"sqlserver", db.Dialect{Driver: db.SQLServer}, db.ObjectRef{Schema: "dbo", Name: "users"}, []string{
+			`UPDATE TOP (1) [dbo].[users] SET [name] = 'O''Brien', [note] = NULL WHERE [id] = '5'`,
+			`INSERT INTO [dbo].[users] ([name]) VALUES ('x')`,
+			`INSERT INTO [dbo].[users] DEFAULT VALUES`,
+			`DELETE TOP (1) FROM [dbo].[users] WHERE [a] = '1' AND [b] = '2'`,
+			`UPDATE TOP (1) [dbo].[users] SET [path] = 'C:\tmp' WHERE [Id] = '1'`,
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

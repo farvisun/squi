@@ -733,3 +733,19 @@ func TestCustomDial(t *testing.T) {
 		t.Error("cancel request did not use dial func")
 	}
 }
+
+func TestEstimateRows(t *testing.T) {
+	cfg := testConfig(t)
+	c := open(t, cfg, nil)
+	s := newSession(t, c, "")
+	runAll(t, s, "ANALYZE orders")
+	est := c.(db.RowEstimator)
+	ctx := context.Background()
+	n, exact, ok, err := est.EstimateRows(ctx, db.ObjectRef{Database: cfg.Database, Schema: "public", Name: "orders"})
+	if err != nil || !ok || exact || n <= 0 {
+		t.Fatalf("orders: n=%d exact=%v ok=%v err=%v", n, exact, ok, err)
+	}
+	if _, _, ok, err := est.EstimateRows(ctx, db.ObjectRef{Database: cfg.Database, Schema: "public", Name: "paid_orders"}); err != nil || ok {
+		t.Fatalf("view: ok=%v err=%v", ok, err)
+	}
+}

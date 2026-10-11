@@ -14,6 +14,7 @@ import (
 	"github.com/farvisun/squi/internal/db"
 	"github.com/farvisun/squi/internal/editsql"
 	"github.com/farvisun/squi/internal/ui/components"
+	"github.com/farvisun/squi/internal/ui/keymap"
 	"github.com/farvisun/squi/internal/ui/theme"
 )
 
@@ -31,10 +32,19 @@ type resultPanel struct {
 	tag     string
 	elapsed time.Duration
 
+	// browse is set when the panel shows a table's rows: filter and sort
+	// then run on the server. back holds the states navigation can
+	// return to (see browse.go).
+	browse *db.Browse
+	back   []browseFrame
+
 	// editing
-	source   *db.ObjectRef
-	detail   *db.TableDetail
-	keyIdx   []int
+	source *db.ObjectRef
+	detail *db.TableDetail
+	keyIdx []int
+	// countArmed: until then, the count key runs an exact COUNT(*)
+	countArmed time.Time
+
 	edits    map[int]map[int]db.Cell
 	added    map[int]bool
 	deleted  map[int]bool
@@ -124,6 +134,9 @@ func (r *resultPanel) status() string {
 			s += " (editable)"
 		}
 	}
+	if r.browse != nil && r.browse.Where != "" {
+		s += " · filtered"
+	}
 	return s
 }
 
@@ -143,6 +156,9 @@ func (r *resultPanel) view(w, h int, focused bool) string {
 		pos = fmt.Sprintf("  row %d · %s %s", row+1, r.cols[col].Name, theme.Dim.Render(r.cols[col].Type))
 	}
 	footer := theme.Dim.Render(r.status()) + pos
+	if b := r.browseStatus(); b != "" {
+		footer += "  " + b
+	}
 	if r.dirty() {
 		footer += "  " + theme.Warn.Render(fmt.Sprintf("%d pending change(s) — ctrl+s save · u revert row", r.changeCount()))
 	}
@@ -167,7 +183,7 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	k := km.String()
 	if r.pendingD {
 		r.pendingD = false
-		if k == "d" {
+		if m.keys.Has("results.delete_row", k) {
 			return r.toggleDelete(m, t)
 		}
 	}
@@ -175,17 +191,17 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 		return r.maybeFetch(m, t)
 	}
 	row, col := r.grid.Cursor()
-	switch k {
-	case "enter":
+	switch m.keys.Action(keymap.Results, k) {
+	case "results.inspect":
 		if row >= 0 {
 			v, _ := r.cellValue(row, col)
 			return m.inspectCell(r.cols[col], v)
 		}
-	case "v":
+	case "results.record":
 		if row >= 0 {
 			return m.showRecord(r, row)
 		}
-	case "y":
+	case "results.copy_cell":
 		if row >= 0 {
 			v, _ := r.cellValue(row, col)
 			if v.Null {
@@ -193,44 +209,76 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 			}
 			return m.copy(v.S, "cell")
 		}
-	case "Y":
+	case "results.copy_row":
 		if row >= 0 {
 			return m.copy(dataio.FormatRows(dataio.FormatTSV, r.cols, [][]db.Cell{r.effectiveRow(row)}, m.exportOpts(r.source)), "row")
 		}
-	case "c":
+	case "results.copy_menu":
 		return m.copyMenu(r)
-	case "/":
-		m.push(newPrompt("Filter rows", "Show rows containing (case-insensitive):", r.grid.Filter(), false,
-			func(v string) tea.Cmd { r.grid.SetFilter(strings.TrimSpace(v)); return nil }))
-	case "esc":
+	case "results.copy_where":
+		return m.copyWhere(t, r)
+	case "results.count":
+		return m.countRows(t, r)
+	case "results.filter":
+		if r.browse != nil {
+			return m.browseFilter(t, r)
+		}
+		return r.localFilter(m)
+	case "results.local_filter":
+		return r.localFilter(m)
+	case "results.clear_filter":
 		if r.grid.Filter() != "" {
 			r.grid.SetFilter("")
+		} else if r.browse != nil && r.browse.Where != "" {
+			return m.clearBrowseFilter(t, r)
 		}
-	case "s":
+	case "results.sort":
+		if r.browse != nil {
+			return m.browseSort(t, r)
+		}
 		r.grid.ToggleSort()
-	case "x":
+	case "results.follow_fk":
+		return m.followFK(t, r)
+	case "results.referencing":
+		return m.referencingRows(t, r)
+	case "results.back":
+		return m.browseBack(t, r)
+	case "results.bookmark":
+		return m.bookmarkView(t, r)
+	case "results.export":
 		return m.exportResult(r)
-	case "r", "f5":
+	case "results.rerun":
 		return m.rerun(t, r)
-	case "F":
+	case "results.load_all":
 		return m.fetchMore(t, r, 1<<30)
-	case "e", "i":
+	case "results.edit":
 		if row >= 0 {
 			return r.editCell(m, t, row, col)
 		}
-	case "o":
+	case "results.add_row":
 		return r.addRow(m, t)
-	case "d":
+	case "results.delete_row":
 		r.pendingD = true
-	case "u":
+	case "results.revert_row":
 		if row >= 0 {
 			r.revertRow(row)
 		}
-	case "U":
+	case "results.revert_all":
 		r.revertAll()
-	case "ctrl+s":
+	case "results.save":
 		return m.saveEdits(t, r)
 	}
+	return nil
+}
+
+// localFilter filters the loaded rows by text.
+func (r *resultPanel) localFilter(m *Model) tea.Cmd {
+	label := "Show rows containing (case-insensitive):"
+	if r.browse != nil {
+		label = "Show loaded rows containing (/ filters the whole table on the server):"
+	}
+	m.push(newPrompt("Filter rows", label, r.grid.Filter(), false,
+		func(v string) tea.Cmd { r.grid.SetFilter(strings.TrimSpace(v)); return nil }))
 	return nil
 }
 
@@ -269,21 +317,27 @@ func (r *resultPanel) ensureEditable(m *Model, t *tab, next func() tea.Cmd) tea.
 	}
 	ref := *r.source
 	return m.loadDetail(t.ac, ref, func(d *db.TableDetail) tea.Cmd {
-		r.detail = d
-		r.keyIdx = nil
-		for _, k := range d.PrimaryKey() {
-			ix := r.colIndex(k)
-			if ix < 0 {
-				r.keyIdx = nil
-				break
-			}
-			r.keyIdx = append(r.keyIdx, ix)
-		}
+		r.setDetail(d)
 		if len(r.keyIdx) == 0 {
 			return m.toast("Not editable: no primary/unique key in the result columns", toastWarn)
 		}
 		return next()
 	})
+}
+
+// setDetail records the source table's detail and the result columns of
+// its key.
+func (r *resultPanel) setDetail(d *db.TableDetail) {
+	r.detail = d
+	r.keyIdx = nil
+	for _, k := range d.PrimaryKey() {
+		ix := r.colIndex(k)
+		if ix < 0 {
+			r.keyIdx = nil
+			break
+		}
+		r.keyIdx = append(r.keyIdx, ix)
+	}
 }
 
 func (r *resultPanel) colIndex(name string) int {

@@ -49,6 +49,8 @@ const (
 	ActYank           // text was copied into the register (host may copy to clipboard)
 	ActEscape         // escape pressed with nothing left to cancel
 	ActSnippets
+	ActExternal // edit the text in $EDITOR
+	ActFormat   // pretty-print the statement / selection
 )
 
 // CompletionItem is an entry in the completion popup.
@@ -765,6 +767,10 @@ func (e *Editor) normalKey(msg tea.KeyMsg) EditorAction {
 			return ActHistory
 		case "s":
 			return ActSnippets
+		case "E":
+			return ActExternal
+		case "f":
+			return ActFormat
 		}
 		return ActNone
 	}

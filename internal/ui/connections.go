@@ -35,13 +35,18 @@ func (c *connManager) reload(m *Model) {
 	var items []components.PickerItem
 	for _, cfg := range m.conns {
 		detail := fmt.Sprintf("%s %s@%s:%d", cfg.Driver, cfg.User, cfg.Host, cfg.Port)
-		if cfg.Database != "" {
+		if cfg.Driver == string(db.SQLite) {
+			detail = "sqlite " + cfg.Database
+		} else if cfg.Database != "" {
 			detail += "/" + cfg.Database
 		}
 		if cfg.SSH.Enabled {
 			detail += " via ssh"
 		}
-		badge := theme.EnvBadge(cfg.Env)
+		badge := theme.ConnBadge(cfg)
+		if cfg.Transient {
+			badge = theme.Dim.Render("unsaved") + " " + badge
+		}
 		if _, open := m.active[cfg.ID]; open {
 			badge = theme.OK.Render("●") + " " + badge
 		}
@@ -114,6 +119,7 @@ func (c *connManager) update(m *Model, msg tea.Msg) tea.Cmd {
 						if err := m.store.Delete(cfg.ID); err != nil {
 							return m.toast(err.Error(), toastError)
 						}
+						m.dropTransient(cfg.ID)
 						_ = secrets.DeleteAll(m.connector.secrets, cfg.ID)
 						m.reloadConns()
 						return m.toast("Deleted "+cfg.Title(), toastInfo)
@@ -124,6 +130,15 @@ func (c *connManager) update(m *Model, msg tea.Msg) tea.Cmd {
 			if cfg, ok := c.selected(m); ok {
 				return c.test(m, cfg)
 			}
+			return nil
+		case "ctrl+u":
+			m.push(newPrompt("Open connection URL", "postgres://user@host/db · mysql://… · clickhouse://… · sqlserver://… · sqlite:path.db (?ssh=bastion&env=prod)", "", false,
+				func(v string) tea.Cmd {
+					if strings.TrimSpace(v) == "" {
+						return nil
+					}
+					return m.connectURL(v)
+				}))
 			return nil
 		}
 	}
@@ -137,17 +152,37 @@ func (c *connManager) edit(m *Model, cfg config.Connection) {
 	f := components.NewForm()
 	f.Section("Connection")
 	f.Text("name", "Name", cfg.Name, "e.g. prod-api")
-	f.Select("driver", "Driver", []string{"postgres", "mysql", "clickhouse"}, cfg.Driver).Hint = "mysql also covers MariaDB; clickhouse uses the HTTP port"
-	f.Text("host", "Host", cfg.Host, "localhost")
-	f.Number("port", "Port", cfg.Port, "5432")
-	f.Text("user", "User", cfg.User, "")
+	f.Select("driver", "Driver", []string{"postgres", "mysql", "clickhouse", "sqlserver", "sqlite"}, cfg.Driver).Hint =
+		"mysql also covers MariaDB; clickhouse uses the HTTP port; sqlserver also covers Azure SQL; sqlite opens a local file"
+	isFile := func() bool { return f.Value("driver") == string(db.SQLite) }
+	server := func() bool { return !isFile() }
+	file := ""
+	if cfg.Driver == string(db.SQLite) {
+		file = cfg.Database
+	}
+	ff := f.Text("file", "Database file", file, "~/data/app.db")
+	ff.Hint, ff.Visible = "the file must exist; :memory: opens a scratch database", isFile
+	f.Text("host", "Host", cfg.Host, "localhost").Visible = server
+	f.Number("port", "Port", cfg.Port, "5432").Visible = server
+	f.Text("user", "User", cfg.User, "").Visible = server
 	pwHint := "leave empty to be asked when connecting"
 	if _, ok, _ := m.connector.secrets.Get(cfg.ID, secrets.DBPassword); ok && cfg.ID != "" {
 		pwHint = "saved in keychain — leave empty to keep"
 	}
-	f.Password("password", "Password", "", pwHint)
-	f.Bool("save_password", "Save passwords", cfg.SavePassword).Hint = "store DB/SSH secrets in the OS keychain"
-	f.Text("database", "Database", cfg.Database, "default database").Hint = "ctrl+l picks one from the server"
+	if cfg.PasswordEnv != "" {
+		pwHint = "taken from $" + cfg.PasswordEnv + " when set"
+	}
+	f.Password("password", "Password", "", pwHint).Visible = server
+	pe := f.Text("password_env", "Password env var", cfg.PasswordEnv, "e.g. PGPASSWORD (optional)")
+	pe.Hint, pe.Visible = "read the password from this environment variable", server
+	sp := f.Bool("save_password", "Save passwords", cfg.SavePassword)
+	sp.Hint, sp.Visible = "store DB/SSH secrets in the OS keychain", server
+	dbName := cfg.Database
+	if file != "" {
+		dbName = ""
+	}
+	dbf := f.Text("database", "Database", dbName, "default database")
+	dbf.Hint, dbf.Visible = "ctrl+l picks one from the server", server
 
 	f.Section("Safety")
 	envs := make([]string, len(config.Envs))
@@ -155,11 +190,15 @@ func (c *connManager) edit(m *Model, cfg config.Connection) {
 		envs[i] = string(e)
 	}
 	f.Select("env", "Environment", envs, string(cfg.Env)).Hint = "prod = red status bar + confirm writes"
+	f.Text("label", "Label", cfg.Label, "e.g. EU (optional)").Hint = "short tag shown next to the environment"
+	f.Text("color", "Color", cfg.Color, "env colour").Hint = "red orange yellow green cyan blue purple gray or #rrggbb"
 	f.Bool("read_only", "Read-only", cfg.ReadOnly).Hint = "block all writes"
+	f.Text("timeout", "Statement timeout", cfg.StatementTimeout, "default: "+fmtTimeout(config.DefaultProdTimeout)+" on prod, none elsewhere").Hint =
+		"cancel statements still running after e.g. 30s or 2m; 0 = no limit"
 
-	sshOn := func() bool { return f.BoolValue("ssh") }
-	f.Section("SSH tunnel")
-	f.Bool("ssh", "Use SSH", cfg.SSH.Enabled)
+	sshOn := func() bool { return f.BoolValue("ssh") && server() }
+	f.Section("SSH tunnel").Visible = server
+	f.Bool("ssh", "Use SSH", cfg.SSH.Enabled).Visible = server
 	f.Text("ssh_alias", "Host alias", cfg.SSH.Alias, "Host from ~/.ssh/config (optional)").Visible = sshOn
 	f.Text("ssh_host", "SSH host", cfg.SSH.Host, "bastion.example.com").Visible = sshOn
 	f.Number("ssh_port", "SSH port", cfg.SSH.Port, "22").Visible = sshOn
@@ -169,11 +208,11 @@ func (c *connManager) edit(m *Model, cfg config.Connection) {
 	f.Password("ssh_password", "SSH password", "", "or key passphrase; leave empty to be asked").Visible = sshOn
 	f.Text("ssh_jump", "Jump hosts", strings.Join(cfg.SSH.JumpHosts, ", "), "user@jump1:22, jump2").Visible = sshOn
 
-	f.Section("TLS")
-	f.Select("ssl_mode", "SSL mode", []string{"", "disable", "prefer", "require", "verify-ca", "verify-full"}, cfg.SSLMode)
-	f.Text("ssl_root", "CA cert", cfg.SSLRootCert, "")
-	f.Text("ssl_cert", "Client cert", cfg.SSLCert, "")
-	f.Text("ssl_key", "Client key", cfg.SSLKey, "")
+	f.Section("TLS").Visible = server
+	f.Select("ssl_mode", "SSL mode", []string{"", "disable", "prefer", "require", "verify-ca", "verify-full"}, cfg.SSLMode).Visible = server
+	f.Text("ssl_root", "CA cert", cfg.SSLRootCert, "").Visible = server
+	f.Text("ssl_cert", "Client cert", cfg.SSLCert, "").Visible = server
+	f.Text("ssl_key", "Client key", cfg.SSLKey, "").Visible = server
 
 	f.Section("Options")
 	f.Number("fetch", "Fetch size", cfg.FetchSize, fmt.Sprintf("%d (default)", m.settings.FetchSize))
@@ -192,8 +231,12 @@ func (c *connManager) formConn() (config.Connection, string, string) {
 	cfg.User = f.Value("user")
 	cfg.Database = f.Value("database")
 	cfg.SavePassword = f.BoolValue("save_password")
+	cfg.PasswordEnv = strings.TrimPrefix(strings.TrimSpace(f.Value("password_env")), "$")
 	cfg.Env = config.Env(f.Value("env"))
 	cfg.ReadOnly = f.BoolValue("read_only")
+	cfg.Label = strings.TrimSpace(f.Value("label"))
+	cfg.Color = strings.TrimSpace(f.Value("color"))
+	cfg.StatementTimeout = strings.TrimSpace(f.Value("timeout"))
 	cfg.SSH.Enabled = f.BoolValue("ssh")
 	cfg.SSH.Alias = f.Value("ssh_alias")
 	cfg.SSH.Host = f.Value("ssh_host")
@@ -212,6 +255,13 @@ func (c *connManager) formConn() (config.Connection, string, string) {
 	cfg.SSLCert = f.Value("ssl_cert")
 	cfg.SSLKey = f.Value("ssl_key")
 	cfg.FetchSize = f.Int("fetch")
+	if cfg.Driver == string(db.SQLite) {
+		// only the file matters; drop server settings left from another driver
+		cfg.Database = strings.TrimSpace(f.Value("file"))
+		cfg.Host, cfg.Port, cfg.User, cfg.PasswordEnv, cfg.SavePassword = "", 0, "", "", false
+		cfg.SSH.Enabled, cfg.SSLMode, cfg.SSLRootCert, cfg.SSLCert, cfg.SSLKey = false, "", "", "", ""
+		return cfg, "", ""
+	}
 	if cfg.Port == 0 {
 		cfg.Port = db.DefaultPort(db.DriverName(cfg.Driver))
 	}
@@ -230,6 +280,10 @@ func (c *connManager) updateForm(m *Model, msg tea.Msg) tea.Cmd {
 			return c.test(m, c.formTestConn(m))
 		case "ctrl+l":
 			return c.listDatabases(m, c.formTestConn(m))
+		case "ctrl+u":
+			m.push(newPrompt("Fill from URL", "postgres://user:pass@host:5432/db?sslmode=require&ssh=bastion", "", false,
+				func(v string) tea.Cmd { return c.fillFromURL(m, v) }))
+			return nil
 		}
 	}
 	oldDriver := c.form.Value("driver")
@@ -240,6 +294,33 @@ func (c *connManager) updateForm(m *Model, msg tea.Msg) tea.Cmd {
 		}
 	}
 	return cmd
+}
+
+// fillFromURL replaces the form's fields with those of a connection URL,
+// keeping the profile's name and id.
+func (c *connManager) fillFromURL(m *Model, raw string) tea.Cmd {
+	if strings.TrimSpace(raw) == "" || c.form == nil {
+		return nil
+	}
+	u, pw, err := config.ParseURL(raw)
+	if err != nil {
+		c.status = theme.Error.Render(err.Error())
+		return nil
+	}
+	cur, _, _ := c.formConn()
+	u.ID, u.SavePassword, u.PasswordEnv = cur.ID, cur.SavePassword, cur.PasswordEnv
+	if cur.Name != "" {
+		u.Name = cur.Name
+	}
+	if u.SSH.Auth == "" {
+		u.SSH.Auth = config.SSHAuthAuto
+	}
+	c.edit(m, u)
+	if pw != "" {
+		c.form.SetValue("password", pw)
+	}
+	c.status = theme.OK.Render("Filled from URL — check the fields, then ctrl+s to save")
+	return nil
 }
 
 // formTestConn returns the connection being edited, with typed secrets
@@ -335,9 +416,23 @@ func (c *connManager) stashSecrets(m *Model, cfg config.Connection, pw, sshPw st
 
 func (c *connManager) save(m *Model) tea.Cmd {
 	cfg, pw, sshPw := c.formConn()
-	if cfg.Host == "" && !cfg.SSH.Enabled {
+	if cfg.Driver == string(db.SQLite) && cfg.Database == "" {
+		c.status = theme.Error.Render("Database file is required")
+		return nil
+	}
+	if cfg.Host == "" && !cfg.SSH.Enabled && cfg.Driver != string(db.SQLite) {
 		c.status = theme.Error.Render("Host is required")
 		return nil
+	}
+	if _, ok := theme.ParseColor(cfg.Color); cfg.Color != "" && !ok {
+		c.status = theme.Error.Render("Unknown color " + cfg.Color + " — use a name like red or #rrggbb")
+		return nil
+	}
+	if cfg.StatementTimeout != "" {
+		if _, err := config.ParseTimeout(cfg.StatementTimeout); err != nil {
+			c.status = theme.Error.Render("Statement " + err.Error())
+			return nil
+		}
 	}
 	saved, err := m.store.Upsert(cfg)
 	if err != nil {
@@ -393,6 +488,7 @@ func (c *connManager) view(m *Model, w, h int) string {
 		c.form.SetSize(w-4, h-7)
 		body := c.form.View()
 		footer := theme.Key.Render("ctrl+s") + " save  " + theme.Key.Render("ctrl+t") + " test  " + theme.Key.Render("ctrl+l") + " databases  " +
+			theme.Key.Render("ctrl+u") + " from URL  " +
 			theme.Key.Render("↑↓/tab") + " move  " + theme.Key.Render("←→/space") + " change  " + theme.Key.Render("esc") + " cancel"
 		content := body + "\n\n" + c.status + "\n" + footer
 		return title + "\n" + components.Box(head, content, w, h-1, true, theme.Accent)
@@ -413,11 +509,23 @@ func (c *connManager) view(m *Model, w, h int) string {
 			}
 		}
 		row("Driver", cfg.Driver)
-		row("Host", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port))
+		if cfg.Driver == string(db.SQLite) {
+			row("File", cfg.Database)
+		} else {
+			row("Host", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port))
+		}
 		row("User", cfg.User)
-		row("Database", cfg.Database)
-		row("Env", theme.EnvBadge(cfg.Env))
+		if cfg.Driver != string(db.SQLite) {
+			row("Database", cfg.Database)
+		}
+		row("Env", theme.ConnBadge(cfg))
 		row("Read-only", yesNo(cfg.ReadOnly, "yes", ""))
+		if cfg.PasswordEnv != "" {
+			row("Password", "$"+cfg.PasswordEnv)
+		}
+		if d := cfg.QueryTimeout(); d > 0 {
+			row("Timeout", fmtTimeout(d))
+		}
 		if cfg.SSH.Enabled {
 			target := cfg.SSH.Alias
 			if target == "" {
@@ -435,7 +543,7 @@ func (c *connManager) view(m *Model, w, h int) string {
 	right := components.Box("Details", strings.Join(det, "\n"), detailW, h-4, false, theme.Accent)
 	footer := theme.Key.Render("enter") + " connect  " + theme.Key.Render("ctrl+n") + " new  " + theme.Key.Render("ctrl+e") + " edit  " +
 		theme.Key.Render("ctrl+y") + " duplicate  " + theme.Key.Render("ctrl+t") + " test  " + theme.Key.Render("ctrl+d") + " delete  " +
-		theme.Key.Render("ctrl+q") + " quit"
+		theme.Key.Render("ctrl+u") + " open URL  " + theme.Key.Render("ctrl+q") + " quit"
 	if len(m.tabs) > 0 {
 		footer += "  " + theme.Key.Render("esc") + " back"
 	}

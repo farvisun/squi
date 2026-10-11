@@ -2,6 +2,8 @@
 package theme
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/farvisun/squi/internal/config"
@@ -72,6 +74,61 @@ func EnvColor(e config.Env) lipgloss.TerminalColor {
 		return Cyan
 	}
 	return Muted
+}
+
+// ConnColor is the colour of a connection: its own Color, else its
+// environment's.
+func ConnColor(c config.Connection) lipgloss.TerminalColor {
+	if col, ok := ParseColor(c.Color); ok {
+		return col
+	}
+	return EnvColor(c.Env)
+}
+
+// ParseColor reads a colour name or "#rrggbb".
+func ParseColor(s string) (lipgloss.TerminalColor, bool) {
+	switch s = strings.ToLower(strings.TrimSpace(s)); s {
+	case "":
+		return nil, false
+	case "red":
+		return Red, true
+	case "orange":
+		return Orange, true
+	case "yellow":
+		return Yellow, true
+	case "green":
+		return Green, true
+	case "cyan":
+		return Cyan, true
+	case "blue":
+		return Accent, true
+	case "purple", "magenta":
+		return Purple, true
+	case "gray", "grey":
+		return Muted, true
+	}
+	if len(s) == 7 && s[0] == '#' {
+		for _, r := range s[1:] {
+			if !strings.ContainsRune("0123456789abcdef", r) {
+				return nil, false
+			}
+		}
+		return lipgloss.Color(s), true
+	}
+	return nil, false
+}
+
+// ConnBadge renders a connection's environment and label, or "".
+func ConnBadge(c config.Connection) string {
+	text := upper(string(c.Env))
+	if c.Label != "" {
+		text = strings.TrimSpace(text + " " + c.Label)
+	}
+	if text == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().Background(ConnColor(c)).Foreground(lipgloss.Color("#000000")).
+		Bold(true).Padding(0, 1).Render(text)
 }
 
 // EnvBadge renders a colored environment label, or "" for untagged.

@@ -24,7 +24,11 @@ type Statement struct {
 // Split splits a script into statements on ';' outside strings, comments and
 // dollar quotes. For MySQL, client "DELIMITER x" lines switch the delimiter
 // (the command itself is not a statement). For Postgres, SQL-standard
-// routine bodies (CREATE FUNCTION … BEGIN ATOMIC … END) are kept whole.
+// routine bodies (CREATE FUNCTION … BEGIN ATOMIC … END) are kept whole;
+// for SQLite, trigger bodies (CREATE TRIGGER … BEGIN … END) are.
+// For SQL Server, GO lines separate batches, BEGIN … END blocks are kept
+// whole, and a batch starting with DECLARE or CREATE PROCEDURE / FUNCTION /
+// TRIGGER is not split on ';' (variables and routine bodies span the batch).
 // Statements consisting only of comments are dropped.
 func Split(src string, d db.DriverName) []Statement {
 	toks := Tokenize(src, d)
@@ -35,12 +39,14 @@ func Split(src string, d db.DriverName) []Statement {
 		depth    = 0 // BEGIN/CASE … END nesting inside a Postgres routine
 		lead     []string
 		mysqlDel = ";"
+		mssql    = d == db.SQLServer
+		batch    = false // SQL Server: up to the next GO
 	)
 	flush := func(endTok, delimEnd int) {
 		if st, ok := makeStatement(src, toks[begin:endTok], delimEnd); ok {
 			out = append(out, st)
 		}
-		begin, routine, depth, lead = endTok+1, false, 0, lead[:0]
+		begin, routine, batch, depth, lead = endTok+1, false, false, 0, lead[:0]
 	}
 	for i, t := range toks {
 		switch {
@@ -49,13 +55,33 @@ func Split(src string, d db.DriverName) []Statement {
 				mysqlDel = nd
 			}
 			flush(i, t.End)
-		case t.Kind == TokPunct && t.Text == ";" && depth == 0 && (d != db.MySQL || mysqlDel == ";"):
+		case t.Kind == TokPunct && t.Text == ";" && depth == 0 && !batch && (d != db.MySQL || mysqlDel == ";"):
 			flush(i, t.End)
+		case t.IsWord() && mssql:
+			w := t.Upper()
+			if len(lead) < 4 {
+				lead = append(lead, w)
+				batch = batch || lead[0] == "DECLARE" || isTSQLRoutineHead(lead)
+			}
+			switch w {
+			case "BEGIN":
+				switch nextWord(toks, i) {
+				case "TRAN", "TRANSACTION", "DISTRIBUTED", "DIALOG", "CONVERSATION":
+				default:
+					depth++
+				}
+			case "CASE":
+				depth++
+			case "END":
+				if depth > 0 {
+					depth--
+				}
+			}
 		case t.IsWord() && d != db.MySQL:
 			w := t.Upper()
 			if len(lead) < 4 {
 				lead = append(lead, w)
-				routine = routine || isRoutineHead(lead)
+				routine = routine || isRoutineHead(lead, d)
 			}
 			if !routine {
 				break
@@ -77,15 +103,53 @@ func Split(src string, d db.DriverName) []Statement {
 }
 
 // isRoutineHead reports whether the leading words start CREATE [OR REPLACE]
-// FUNCTION/PROCEDURE.
-func isRoutineHead(w []string) bool {
+// FUNCTION/PROCEDURE, or for SQLite CREATE [TEMP] TRIGGER.
+func isRoutineHead(w []string, d db.DriverName) bool {
 	if len(w) < 2 || w[0] != "CREATE" {
 		return false
+	}
+	if d == db.SQLite {
+		return w[1] == "TRIGGER" || len(w) >= 3 && (w[1] == "TEMP" || w[1] == "TEMPORARY") && w[2] == "TRIGGER"
 	}
 	if w[1] == "OR" {
 		return len(w) >= 4 && (w[3] == "FUNCTION" || w[3] == "PROCEDURE")
 	}
 	return w[1] == "FUNCTION" || w[1] == "PROCEDURE"
+}
+
+// isTSQLRoutineHead reports whether the leading words start CREATE [OR
+// ALTER] / ALTER PROC[EDURE] / FUNCTION / TRIGGER, whose body runs to the end
+// of the batch.
+func isTSQLRoutineHead(w []string) bool {
+	if len(w) < 2 || (w[0] != "CREATE" && w[0] != "ALTER") {
+		return false
+	}
+	obj := w[1]
+	if w[0] == "CREATE" && w[1] == "OR" {
+		if len(w) < 4 {
+			return false
+		}
+		obj = w[3]
+	}
+	switch obj {
+	case "PROC", "PROCEDURE", "FUNCTION", "TRIGGER":
+		return true
+	}
+	return false
+}
+
+// nextWord returns the upper-cased next significant word after toks[i].
+func nextWord(toks []Token, i int) string {
+	for j := i + 1; j < len(toks); j++ {
+		if toks[j].Trivia() {
+			continue
+		}
+		if toks[j].IsWord() {
+			return toks[j].Upper()
+		}
+		return ""
+	}
+	return ""
 }
 
 // makeStatement trims trivia from both ends of toks; delimEnd < 0 means the
