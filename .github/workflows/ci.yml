@@ -41,3 +41,7 @@ jobs:
         with:
           version: "~> v2"
           args: release --snapshot --clean
+        env:
+          # snapshots never publish; the templates only need the variables set
+          HOMEBREW_TAP_DEPLOY_KEY: ""
+          SCOOP_BUCKET_DEPLOY_KEY: ""

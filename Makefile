@@ -56,7 +56,7 @@ dev: build
 	HOME=$(CURDIR)/.devhome $(BIN) --config dev/config
 
 snapshot:
-	goreleaser release --snapshot --clean
+	HOMEBREW_TAP_DEPLOY_KEY= SCOOP_BUCKET_DEPLOY_KEY= goreleaser release --snapshot --clean
 
 clean:
 	rm -rf bin dist .devhome
