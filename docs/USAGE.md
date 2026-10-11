@@ -61,7 +61,7 @@ Move focus with `tab` / `shift+tab` or `ctrl+w h/j/k/l`; `ctrl+w z` zooms a pane
 
 Useful commands: `:use [db] [schema]`, `:commit`, `:rollback`, `:tx` (manual
 transactions), `:timeout 2m` (this tab's statement timeout; `0` for none),
-`:format`, `:edit`, `:open <name|url>`, `:export`, `:snippet <name>`, `:snippets`,
+`:format`, `:edit`, `:open <name|url>`, `:consoles` (DataGrip queries), `:export`, `:snippet <name>`, `:snippets`,
 `:keys`, `:set novim`, `:set fetch=5000`.
 
 Every binding above can be changed; see [Key bindings](#key-bindings).
@@ -180,6 +180,47 @@ Query parameters set the profile: `sslmode`, `sslrootcert`, `sslcert`, `sslkey`,
 `ssh=[user@]host[:port]` (or an `~/.ssh/config` alias), `ssh_jump=a,b` and
 `ssh_key=PATH`. Anything else becomes a driver parameter. A password in the URL is
 used for that connection only and never written to disk.
+
+### Importing from DataGrip
+
+```sh
+squi import datagrip --dry-run   # show what would be imported
+squi import datagrip             # import, or update what was imported before
+squi import datagrip --prune     # also remove those deleted in DataGrip
+squi import datagrip --project ~/DataGripProjects/work   # a specific project
+```
+
+squi reads the newest DataGrip installation: its global data sources and those of
+its recent projects (`.idea/dataSources.xml` and `dataSources.local.xml`), with the
+SSH tunnels they use (`options/sshConfigs.xml`). `--project` also accepts the
+options directory of another JetBrains IDE, e.g. PhpStorm's global data sources.
+`ctrl+g` in the connection manager does the same after showing a preview.
+
+- **Connections**: PostgreSQL, MySQL/MariaDB, ClickHouse (HTTP), SQL Server and
+  SQLite data sources are converted from their JDBC URL; others are skipped with a
+  reason. Names keep the DataGrip folder (`shop/orders`). JDBC parameters squi
+  understands (SSL settings, `ApplicationName`, `currentSchema`, `databaseName`, …)
+  are carried over; the rest are listed with `-v`.
+- **SSH**: tunnels become the connection's SSH settings. *OpenSSH config and
+  authentication agent* maps to `auto` (agent, `~/.ssh/config`, key files), *Key
+  pair* to `key` and *Password* to `password`.
+- **Environment**: new connections get one from their name — `prod`/`production`,
+  `stage`/`staging`, `dev`/`test`, `local` — and SQLite files and plain `localhost`
+  are `local`. Check it before relying on the prod guards.
+- **Re-importing** matches connections by DataGrip's id. DataGrip's address, user,
+  database, TLS, SSH and parameters win; squi's environment, label, colour,
+  timeout, fetch size and password settings are kept, and read-only stays on once
+  set on either side. Connections you created in squi are never touched.
+- **Passwords** are not copied. When an imported connection has no password in
+  squi, it reads the one DataGrip saved in the macOS Keychain
+  (`IntelliJ Platform DB — <id>`) on connect; macOS asks to allow it — *Allow* asks
+  again next time, *Always Allow* lets the `security` tool read that item without
+  asking. The password is kept in memory for the session. On Linux and Windows,
+  squi asks for the password instead.
+- **Queries**: `:consoles` (`:dg`) lists the DataGrip query consoles of the current
+  connection and the project files DataGrip attaches to it, newest first, read from
+  DataGrip's files as they are now; picking one opens it in a new tab without
+  running it.
 
 ### Key bindings
 
@@ -327,4 +368,5 @@ make dev-reset         # recreate databases from dev/seed/*.sql
 | `internal/dataio` | Export formats and CSV import |
 | `internal/history` | Query history and snippets |
 | `internal/config`, `internal/secrets` | Profiles, settings, OS keychain |
+| `internal/datagrip` | DataGrip import: data sources, SSH configs, consoles, keychain passwords |
 | `internal/ui` | Bubble Tea application; `internal/ui/components` holds the editor, grid, picker and form widgets; `internal/ui/keymap` the remappable key bindings |

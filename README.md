@@ -45,6 +45,9 @@ server you reached over SSH.
   **SQLite** files — all in pure Go, so the binary stays static.
 - **Connect from a URL** (`squi --connect 'postgres://app@db/api?ssh=bastion'`),
   with `${VAR}` references and password environment variables for headless servers.
+- **Bring your DataGrip setup**: `squi import datagrip` imports data sources with
+  their SSH tunnels and keeps them in sync; saved passwords and query consoles are
+  read from DataGrip as you use them.
 - **Make it yours**: rebind any key, format SQL, open the query in `$EDITOR`.
 - **Pick up where you left off** — tabs and queries are restored on the next start.
 

@@ -84,6 +84,8 @@ func init() {
 			}},
 		{name: "history", desc: "Search query history", keys: "ctrl+r · space h", needTab: true,
 			run: func(m *Model, t *tab, _ string) tea.Cmd { return m.historyPicker(t) }},
+		{name: "consoles", aliases: []string{"dg"}, desc: "Open a DataGrip query console or query file of this connection", needTab: true,
+			run: func(m *Model, t *tab, _ string) tea.Cmd { return m.consolePicker(t) }},
 		{name: "snippets", desc: "Insert a saved snippet", keys: "space s", needTab: true,
 			run: func(m *Model, t *tab, _ string) tea.Cmd { return m.snippetPicker(t) }},
 		{name: "snippet", args: "<name>", desc: "Save statement under cursor as a snippet", needTab: true,

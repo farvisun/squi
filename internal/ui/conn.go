@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/farvisun/squi/internal/config"
+	"github.com/farvisun/squi/internal/datagrip"
 	"github.com/farvisun/squi/internal/db"
 	"github.com/farvisun/squi/internal/db/clickhouse" // registers the driver
 	"github.com/farvisun/squi/internal/db/mssql"
@@ -116,6 +117,14 @@ func (c *connector) open(ctx context.Context, cfg config.Connection) (*activeCon
 	password := c.secret(cfg.ID, secrets.DBPassword)
 	if pw, ok := cfg.EnvPassword(); ok {
 		password = pw
+	}
+	if password == "" && cfg.Origin != nil && cfg.Origin.Tool == datagrip.Tool {
+		// imported from DataGrip: use the password it saved (macOS asks to
+		// allow the Keychain access); kept in memory for this run only
+		if pw, err := datagrip.Password(ctx, cfg.Origin.ID); err == nil {
+			password = pw
+			_ = c.memory.Set(cfg.ID, secrets.DBPassword, pw)
+		}
 	}
 	prompted := false
 	for attempt := 0; ; attempt++ {

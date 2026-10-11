@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/farvisun/squi/internal/config"
+	"github.com/farvisun/squi/internal/datagrip"
 	"github.com/farvisun/squi/internal/db"
 	"github.com/farvisun/squi/internal/history"
 	"github.com/farvisun/squi/internal/schema"
@@ -47,13 +48,17 @@ type Options struct {
 	// TermWrite writes raw control sequences to the terminal; set when the
 	// input is wrapped by termkeys (enables extended key reporting).
 	TermWrite func(string)
+	// DataGripRoot is the JetBrains configuration root (default: the
+	// platform's); tests point it elsewhere.
+	DataGripRoot string
 }
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	store    *config.Store
-	settings config.Settings
-	conns    []config.Connection
+	dataGripRoot string
+	store        *config.Store
+	settings     config.Settings
+	conns        []config.Connection
 	// transient are unsaved profiles opened from a connection URL.
 	transient []config.Connection
 	connector *connector
@@ -101,18 +106,22 @@ type Model struct {
 // New creates the model, loading config, history and snippets.
 func New(o Options) (*Model, error) {
 	st, err := o.Store.LoadSettings()
+	if o.DataGripRoot == "" {
+		o.DataGripRoot = datagrip.Root()
+	}
 	m := &Model{
-		store:      o.Store,
-		settings:   st,
-		bridge:     o.Bridge,
-		connector:  &connector{secrets: o.Secrets, memory: &secrets.Memory{}, bridge: o.Bridge},
-		active:     map[string]*activeConn{},
-		connecting: map[string]bool{},
-		explorerW:  st.ExplorerWidth,
-		editorPct:  40,
-		spinner:    spinner.New(spinner.WithSpinner(spinner.MiniDot)),
-		autoConn:   o.Connect,
-		termWrite:  o.TermWrite,
+		dataGripRoot: o.DataGripRoot,
+		store:        o.Store,
+		settings:     st,
+		bridge:       o.Bridge,
+		connector:    &connector{secrets: o.Secrets, memory: &secrets.Memory{}, bridge: o.Bridge},
+		active:       map[string]*activeConn{},
+		connecting:   map[string]bool{},
+		explorerW:    st.ExplorerWidth,
+		editorPct:    40,
+		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		autoConn:     o.Connect,
+		termWrite:    o.TermWrite,
 	}
 	if err != nil {
 		m.startErr = err.Error()

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/farvisun/squi/internal/config"
+	"github.com/farvisun/squi/internal/datagrip"
 	"github.com/farvisun/squi/internal/db"
 	"github.com/farvisun/squi/internal/secrets"
 	"github.com/farvisun/squi/internal/ui/components"
@@ -111,6 +112,8 @@ func (c *connManager) update(m *Model, msg tea.Msg) tea.Cmd {
 				c.edit(m, cfg)
 			}
 			return nil
+		case "ctrl+g":
+			return c.syncDataGrip(m)
 		case "ctrl+d":
 			if cfg, ok := c.selected(m); ok {
 				m.push(&confirmModal{title: "Delete connection", danger: true,
@@ -539,11 +542,14 @@ func (c *connManager) view(m *Model, w, h int) string {
 			row("SSH auth", cfg.SSH.Auth)
 		}
 		row("TLS", cfg.SSLMode)
+		if cfg.Origin != nil && cfg.Origin.Tool == datagrip.Tool {
+			row("Imported", "DataGrip · :consoles opens its queries")
+		}
 	}
 	right := components.Box("Details", strings.Join(det, "\n"), detailW, h-4, false, theme.Accent)
 	footer := theme.Key.Render("enter") + " connect  " + theme.Key.Render("ctrl+n") + " new  " + theme.Key.Render("ctrl+e") + " edit  " +
 		theme.Key.Render("ctrl+y") + " duplicate  " + theme.Key.Render("ctrl+t") + " test  " + theme.Key.Render("ctrl+d") + " delete  " +
-		theme.Key.Render("ctrl+u") + " open URL  " + theme.Key.Render("ctrl+q") + " quit"
+		theme.Key.Render("ctrl+u") + " open URL  " + theme.Key.Render("ctrl+g") + " DataGrip sync  " + theme.Key.Render("ctrl+q") + " quit"
 	if len(m.tabs) > 0 {
 		footer += "  " + theme.Key.Render("esc") + " back"
 	}

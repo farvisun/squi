@@ -94,8 +94,21 @@ type Connection struct {
 
 	SSH SSH `toml:"ssh"`
 
+	// Origin is set on profiles imported from another tool.
+	Origin *Origin `toml:"origin,omitempty"`
+
 	// Transient marks a profile opened from a URL that is not saved.
 	Transient bool `toml:"-"`
+}
+
+// Origin records where an imported profile came from, so importing again
+// updates the profile instead of adding a copy.
+type Origin struct {
+	Tool string `toml:"tool"` // "datagrip"
+	ID   string `toml:"id"`   // the tool's id of the data source
+	// Source is the directory the definition was read from: a DataGrip
+	// project, or an IDE's options directory for global data sources.
+	Source string `toml:"source,omitempty"`
 }
 
 // Title is the label shown in tabs and lists.
