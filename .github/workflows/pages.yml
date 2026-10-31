@@ -2,9 +2,8 @@ name: pages
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths: [docs/**, site/**, .github/workflows/pages.yml]
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
