@@ -17,10 +17,19 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
+      - name: Release notes from CHANGELOG.md
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '$0 ~ "^## "v"( |$)" {on=1; next} on && /^## / {exit} on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          test -s "$RUNNER_TEMP/notes.md" || { echo "CHANGELOG.md has no section for $v"; exit 1; }
+          cat >> "$RUNNER_TEMP/notes.md" <<EOF
+
+          **Install:** \`brew install farvisun/tap/squi\` · \`scoop install farvisun/squi\` · packages below · [user guide](https://farvisun.github.io/squi/docs.html)
+          EOF
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes ${{ runner.temp }}/notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # write-enabled deploy keys of farvisun/homebrew-tap and farvisun/scoop-bucket
