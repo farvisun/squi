@@ -21,6 +21,9 @@ var errCancelled = errors.New("cancelled by user")
 // something and block until the UI answers.
 type Bridge struct {
 	Send func(tea.Msg)
+	// Term answers prompts when there is no UI (squi diff): secret asks
+	// for a password, otherwise a yes/no question. ok false cancels.
+	Term func(secret bool, title, text string) (value string, ok bool)
 }
 
 type promptKind int
@@ -44,6 +47,13 @@ type promptReply struct {
 }
 
 func (b *Bridge) ask(ctx context.Context, p promptMsg) (promptReply, error) {
+	if b != nil && b.Send == nil && b.Term != nil {
+		v, ok := b.Term(p.kind == askSecret, p.title, p.text)
+		if !ok {
+			return promptReply{}, errCancelled
+		}
+		return promptReply{value: v, ok: true}, nil
+	}
 	if b == nil || b.Send == nil {
 		return promptReply{}, errors.New("no interactive UI available")
 	}

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -22,6 +23,18 @@ import (
 var version = "dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "diff" {
+		if err := runDiff(os.Args[2:]); err != nil {
+			if errors.Is(err, errDiffers) {
+				os.Exit(1)
+			}
+			if !errors.Is(err, flag.ErrHelp) {
+				fmt.Fprintln(os.Stderr, "squi diff:", err)
+			}
+			os.Exit(2)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "import" {
 		if err := runImport(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "squi import:", err)
