@@ -2,7 +2,7 @@
 
 All notable changes to squi. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.6.0 — 2026-10-31
 
 ### Added
 - Query parameters: statements with `:name`, `$1` or `?` placeholders open a form
@@ -17,6 +17,8 @@ All notable changes to squi. Versions follow [semantic versioning](https://semve
 
 ### Changed
 - CI and release workflows use the current major versions of their actions.
+- Dependencies updated, including Bubbles 1.0, pgx 5.11 and the MySQL driver 1.10.
+- Release notes come from this changelog.
 
 ## 0.5.0 — 2026-10-11
 
