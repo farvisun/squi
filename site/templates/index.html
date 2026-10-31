@@ -1,0 +1,130 @@
+{{define "index.html"}}{{template "head" .}}
+<main>
+<section class="hero">
+  <div class="wrap">
+    {{if .Version}}<a class="pill" href="https://github.com/farvisun/squi/releases/latest">{{.Version}} · see what's new</a>{{end}}
+    <h1>SQL in your terminal.<br><span class="accent">Fast, and safe on production.</span></h1>
+    <p class="lead">squi is a keyboard-driven SQL client: browse schemas, write queries with
+      completion, edit rows and read query plans, locally or on a server you reached over SSH.
+      One small static binary.</p>
+    <div class="cta">
+      <div class="cmd"><code><span class="dim">$</span> brew install farvisun/tap/squi</code>
+        <button data-copy="brew install farvisun/tap/squi">Copy</button></div>
+      <a class="btn" href="docs.html">Read the guide</a>
+    </div>
+    <ul class="engines">
+      <li>PostgreSQL</li><li>MySQL</li><li>MariaDB</li><li>ClickHouse</li><li>SQL Server</li><li>SQLite</li>
+    </ul>
+  </div>
+  <div class="wrap">
+    <div class="term">
+      <video src="demo.mp4" poster="preview.png" autoplay muted loop playsinline
+        aria-label="squi demo: autocomplete, results, EXPLAIN ANALYZE, table details and a guarded DELETE on production over SSH"></video>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="section">
+  <div class="wrap">
+    <h2>Everything you reach for in a GUI client</h2>
+    <p class="sub">A DataGrip-style workflow without the weight, built for the keyboard.</p>
+    <div class="grid">
+      <article><h3>Explore</h3><p>Databases, schemas, tables, views and routines, with columns, indexes, foreign keys, DDL and sizes a key away.</p></article>
+      <article><h3>Query</h3><p>Tabs with syntax highlighting, context-aware completion, vim or standard keys, a formatter and your <code>$EDITOR</code>.</p></article>
+      <article><h3>Browse results</h3><p>A streaming grid: lazy loading, sort, filter, a cell inspector, and export to CSV, TSV, JSON or SQL.</p></article>
+      <article><h3>Navigate data</h3><p>Filter and sort whole tables on the server, follow foreign keys and jump to referencing rows.</p></article>
+      <article><h3>Edit inline</h3><p>Change rows in the grid, review the generated SQL, then apply it in one transaction that rolls back on any surprise.</p></article>
+      <article><h3>Read plans</h3><p><code>EXPLAIN</code> and <code>EXPLAIN ANALYZE</code> as a tree with the hot path highlighted.</p></article>
+      <article><h3>Connect through SSH</h3><p>Bastions, <code>~/.ssh/config</code> aliases and <code>ProxyJump</code> chains, with keys, agents and host-key checks.</p></article>
+      <article><h3>Admin views</h3><p>Sessions, cancel and kill, server variables, users and grants, table sizes.</p></article>
+      <article><h3>Bring DataGrip along</h3><p><code>squi import datagrip</code> imports data sources with their SSH tunnels, passwords and query consoles.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="section alt">
+  <div class="wrap split">
+    <div>
+      <span class="tag">New</span>
+      <h2>Query parameters</h2>
+      <p>Write <code>:name</code>, <code>$1</code> or <code>?</code> and squi asks for the values before
+        the query runs, then remembers them, so the next run is one key. Strings, comments, casts and
+        dollar-quoted bodies are left alone.</p>
+      <a class="more" href="docs.html#query-parameters">How parameters work →</a>
+    </div>
+    <pre class="code"><span class="k">SELECT</span> id, total, status
+<span class="k">FROM</span> orders
+<span class="k">WHERE</span> customer_id = <span class="p">:customer</span>
+  <span class="k">AND</span> created_at &gt; <span class="p">:since</span>;
+
+<span class="c">┌ Query parameters ─────────────────┐
+│ :customer  42                     │
+│ :since     now() - interval '7d'  │
+│ enter run · esc cancel            │
+└───────────────────────────────────┘</span></pre>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap split">
+    <div>
+      <span class="tag">New</span>
+      <h2>Schema diff</h2>
+      <p><code>squi diff staging prod</code> compares tables, columns, primary keys, indexes, foreign
+        keys and views, then writes the <code>ALTER</code> script that brings the target in line.
+        It never runs anything; drops stay commented out until you ask for them, and
+        <code>-exit-code</code> fails a CI job when schemas drift.</p>
+      <a class="more" href="docs.html#schema-diff">Compare schemas →</a>
+    </div>
+    <pre class="code"><span class="dim">$</span> squi diff staging prod
+<span class="c">-- staging → prod: 3 difference(s)
+--   missing column  users.org_id
+--   nullability     users.email: null → not null
+--   missing index   users.users_org_idx</span>
+
+<span class="k">ALTER TABLE</span> "public"."users" <span class="k">ADD COLUMN</span> "org_id" bigint;
+<span class="k">ALTER TABLE</span> "public"."users" <span class="k">ALTER COLUMN</span> "email" <span class="k">SET NOT NULL</span>;
+<span class="k">CREATE INDEX</span> "users_org_idx" <span class="k">ON</span> "public"."users" ("org_id");</pre>
+  </div>
+</section>
+
+<section class="section alt">
+  <div class="wrap">
+    <h2>Built for production databases</h2>
+    <p class="sub">The guard rails are on by default, because the scary server is the one you open most.</p>
+    <div class="grid three">
+      <article><h3>Read-only connections</h3><p>The session itself is read-only where the engine supports it, and squi blocks writes before they reach the server.</p></article>
+      <article><h3>Typed confirmation</h3><p><code>DROP</code>, <code>TRUNCATE</code>, and <code>DELETE</code> or <code>UPDATE</code> without a real <code>WHERE</code> need the database name typed out.</p></article>
+      <article><h3>Prod environments</h3><p>A red status bar, a confirmation before every write, and a 30-second statement timeout by default.</p></article>
+      <article><h3>Manual transactions</h3><p>Run changes inside a transaction and commit or roll back from the transaction menu.</p></article>
+      <article><h3>Secrets stay out of files</h3><p>Passwords go to the OS keychain or environment variables, never the config.</p></article>
+      <article><h3>Reviewed edits</h3><p>Inline edits, imports and diffs show their SQL before anything runs.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="install" class="section">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="sub">macOS, Linux and Windows. No runtime, no daemon.</p>
+    <div class="install">
+      <div class="row"><span>Homebrew</span><code>brew install farvisun/tap/squi</code><button data-copy="brew install farvisun/tap/squi">Copy</button></div>
+      <div class="row"><span>Scoop</span><code>scoop bucket add farvisun https://github.com/farvisun/scoop-bucket; scoop install squi</code><button data-copy="scoop bucket add farvisun https://github.com/farvisun/scoop-bucket; scoop install squi">Copy</button></div>
+      <div class="row"><span>Go 1.26+</span><code>go install github.com/farvisun/squi/cmd/squi@latest</code><button data-copy="go install github.com/farvisun/squi/cmd/squi@latest">Copy</button></div>
+      <div class="row"><span>Linux packages</span><code>.deb, .rpm and .apk on the releases page</code><a class="btn small" href="https://github.com/farvisun/squi/releases/latest">Releases</a></div>
+    </div>
+
+    <h3 class="keys-title">Then</h3>
+    <pre class="code"><span class="dim">$</span> squi                                   <span class="c"># connection manager</span>
+<span class="dim">$</span> squi --connect prod-api                <span class="c"># a saved connection</span>
+<span class="dim">$</span> squi --connect 'mysql://root@127.0.0.1/shop'   <span class="c"># a URL, never saved</span>
+<span class="dim">$</span> squi --connect ./app.db                <span class="c"># a SQLite file</span></pre>
+    <table class="keys">
+      <tr><td><kbd>F1</kbd> <kbd>?</kbd></td><td>Every key binding</td><td><kbd>ctrl+p</kbd></td><td>Command palette</td></tr>
+      <tr><td><kbd>ctrl+enter</kbd> <kbd>F5</kbd></td><td>Run the statement under the cursor</td><td><kbd>tab</kbd></td><td>Explorer, editor, results</td></tr>
+      <tr><td><kbd>ctrl+t</kbd> <kbd>alt+1…9</kbd></td><td>New tab, switch tab</td><td><kbd>ctrl+g</kbd></td><td>Transaction menu</td></tr>
+    </table>
+  </div>
+</section>
+</main>
+{{template "foot" .}}{{end}}

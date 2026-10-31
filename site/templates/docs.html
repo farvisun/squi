@@ -1,0 +1,20 @@
+{{define "docs.html"}}{{template "head" .}}
+<main class="wrap docs">
+  <aside class="toc">
+    <details open>
+      <summary>On this page</summary>
+      <ul>
+      {{range .TOC}}<li class="l{{.Level}}"><a href="#{{.ID}}">{{.Text}}</a></li>
+      {{end}}</ul>
+    </details>
+  </aside>
+  <article class="prose">
+    <h1>User guide</h1>
+    {{.Body}}
+    <p class="edit"><a href="https://github.com/farvisun/squi/edit/main/docs/USAGE.md">Edit this page on GitHub</a></p>
+  </article>
+</main>
+<script>
+if (matchMedia("(max-width: 900px)").matches) document.querySelector(".toc details").removeAttribute("open");
+</script>
+{{template "foot" .}}{{end}}

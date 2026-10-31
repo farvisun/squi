@@ -6,3 +6,5 @@
 *.out
 /dev/config/state/
 /dev/squi.db*
+/_site/
+/site/_site/

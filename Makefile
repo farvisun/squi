@@ -11,7 +11,7 @@ TEST_ENV := SQUI_TEST_PG=postgres://squi:squi@127.0.0.1:54329/squi \
             SQUI_TEST_MSSQL=sqlserver://squi:squi@127.0.0.1:14339/squi \
             SQUI_TEST_SSH=1
 
-.PHONY: build install uninstall test test-integration vet dev dev-up dev-down dev-reset dev-sqlite snapshot clean
+.PHONY: build install uninstall test test-integration vet dev dev-up dev-down dev-reset dev-sqlite snapshot site clean
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/squi
@@ -66,5 +66,9 @@ dev: build dev/squi.db
 snapshot:
 	HOMEBREW_TAP_DEPLOY_KEY= SCOOP_BUCKET_DEPLOY_KEY= goreleaser release --snapshot --clean
 
+# GitHub Pages site (landing page + user guide) into _site/
+site:
+	cd site && go run . -out ../_site -version "$$(git describe --tags --abbrev=0 2>/dev/null)"
+
 clean:
-	rm -rf bin dist .devhome
+	rm -rf bin dist .devhome _site

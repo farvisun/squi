@@ -1,0 +1,55 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<meta name="description" content="squi is a fast, keyboard-driven SQL client for the terminal: PostgreSQL, MySQL, MariaDB, ClickHouse, SQL Server and SQLite, over SSH, safe on production, one small binary.">
+<meta property="og:title" content="{{.Title}}">
+<meta property="og:description" content="A fast, keyboard-driven SQL client for your terminal.">
+<meta property="og:image" content="https://farvisun.github.io/squi/preview.png">
+<meta property="og:url" content="https://farvisun.github.io/squi/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1e1e2e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231e1e2e'/%3E%3Ctext x='6' y='22' font-family='monospace' font-size='16' font-weight='700' fill='%2389b4fa'%3E%3E_%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="index.html"><span class="prompt">&gt;_</span> squi</a>
+    <nav>
+      <a href="index.html#features">Features</a>
+      <a href="index.html#install">Install</a>
+      <a href="docs.html">Guide</a>
+      <a href="https://github.com/farvisun/squi" class="gh">GitHub</a>
+    </nav>
+  </div>
+</header>
+{{end}}
+
+{{define "foot"}}
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <span>squi is MIT licensed. Made for people who live in the terminal.</span>
+    <span>
+      <a href="https://github.com/farvisun/squi">GitHub</a> ·
+      <a href="https://github.com/farvisun/squi/releases">Releases</a> ·
+      <a href="https://github.com/farvisun/squi/blob/main/CHANGELOG.md">Changelog</a> ·
+      <a href="https://github.com/farvisun/squi/blob/main/SECURITY.md">Security</a>
+    </span>
+  </div>
+</footer>
+<script>
+document.querySelectorAll("[data-copy]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    navigator.clipboard.writeText(b.getAttribute("data-copy")).then(function () {
+      var t = b.textContent; b.textContent = "Copied"; b.classList.add("done");
+      setTimeout(function () { b.textContent = t; b.classList.remove("done"); }, 1400);
+    });
+  });
+});
+</script>
+</body>
+</html>
+{{end}}

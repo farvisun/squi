@@ -1,0 +1,46 @@
+name: pages
+on:
+  push:
+    branches: [main]
+    paths: [docs/**, site/**, .github/workflows/pages.yml]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: site/go.mod
+          cache-dependency-path: site/go.sum
+      - name: Build site
+        working-directory: site
+        run: go run . -out ../_site -version "$(git describe --tags --abbrev=0 2>/dev/null || true)"
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
