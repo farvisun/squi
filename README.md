@@ -48,6 +48,10 @@ server you reached over SSH.
 - **Bring your DataGrip setup**: `squi import datagrip` imports data sources with
   their SSH tunnels and keeps them in sync; saved passwords and query consoles are
   read from DataGrip as you use them.
+- **Query parameters**: `:name`, `$1` and `?` placeholders ask for values before the
+  query runs, and remember them for the next run.
+- **Compare schemas**: `squi diff staging prod` lists what differs in tables,
+  columns, indexes and foreign keys, and writes the `ALTER` script to align them.
 - **Make it yours**: rebind any key, format SQL, open the query in `$EDITOR`.
 - **Pick up where you left off** — tabs and queries are restored on the next start.
 
@@ -69,6 +73,7 @@ squi                    # open the connection manager
 squi --connect prod-api # jump straight into a saved connection
 squi --connect 'mysql://root@127.0.0.1/shop'   # or a URL, never saved
 squi --connect ./app.db                        # or a SQLite file
+squi diff staging prod  # what differs in prod, and the SQL to align it
 ```
 
 Press `ctrl+n` to add a connection, `ctrl+t` to test it, `ctrl+s` to save, then
@@ -84,7 +89,7 @@ Press `ctrl+n` to add a connection, `ctrl+t` to test it, `ctrl+s` to save, then
 | `ctrl+g` | Transaction menu |
 | `ctrl+q` | Quit |
 
-See the **[user guide](docs/USAGE.md)** for configuration, SSH setup, the safety model
+See the **[website](https://farvisun.github.io/squi/)** and the **[user guide](docs/USAGE.md)** for configuration, SSH setup, the safety model
 and the full key reference.
 
 ## Development

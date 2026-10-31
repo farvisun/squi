@@ -102,6 +102,77 @@ The timeout is enforced by squi: when it expires the statement is cancelled the 
 way as `ctrl+c`, so it works the same on every engine and also covers statements a
 server-side limit would not (MySQL's `max_execution_time` only applies to `SELECT`).
 
+## Query parameters
+
+Placeholders in a statement ask for their values before it runs:
+
+```sql
+SELECT * FROM orders WHERE customer_id = :customer AND created_at > :since;
+```
+
+`ctrl+enter` opens a small form with one field per parameter; `enter` moves to the
+next field and runs from the last one, `ctrl+s` runs right away, `esc` cancels.
+The values are remembered for the rest of the session, so running the query again
+only needs `enter`.
+
+| Engine | Placeholders |
+|---|---|
+| all | `:name` |
+| PostgreSQL | `$1`, `$2`… |
+| MySQL / MariaDB | `?` (each one is its own parameter: `?1`, `?2`…) |
+| SQLite | `?`, `?1`, `:name`, `@name`, `$name` |
+
+A value is inserted into the statement as written, so it is a SQL literal: `42`,
+`'Ada'`, `NULL`, `now() - interval '1 day'`. Placeholders inside strings, comments,
+quoted identifiers and dollar-quoted bodies are ignored, as are `::` casts, array
+slices such as `a[1:n]` and ClickHouse's `{name:Type}` parameters. The statement
+with the values filled in is what runs, what the safety checks see and what history
+records.
+
+Set `query_parameters = false` in `settings.toml` to run statements as written.
+
+## Schema diff
+
+`squi diff SOURCE TARGET` compares the tables and views of two schemas and prints
+what differs in TARGET, followed by the statements that make TARGET match SOURCE:
+
+```sh
+squi diff staging prod                         # saved connection names
+squi diff ./old.db ./new.db                    # SQLite files
+squi diff 'postgres://app@db/api' prod -target-schema reporting
+squi diff dev dev -source-schema public -target-schema next   # two schemas, one database
+```
+
+```text
+-- staging → prod: 3 difference(s)
+--   missing column       users.org_id
+--   nullability          users.email: null → not null
+--   missing index        users.users_org_idx: (none) → (org_id)
+
+ALTER TABLE "public"."users" ADD COLUMN "org_id" bigint;
+ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+CREATE INDEX "users_org_idx" ON "public"."users" ("org_id");
+```
+
+It compares columns (type, nullability, default), the primary key, indexes and
+foreign keys, and whether views exist. Tables missing in TARGET are created from
+SOURCE's DDL. squi never runs the script: review it and run it yourself.
+
+| Flag | Meaning |
+|---|---|
+| `-sql` / `-report` | Print only the script / only the list of differences |
+| `-drop` | Write `DROP` statements for what only TARGET has (by default they are commented out) |
+| `-source-db`, `-target-db` | Database to compare (default: the connection's) |
+| `-source-schema`, `-target-schema` | Schema to compare (default: `public`, `dbo`, `main`, or the database) |
+| `-exit-code` | Exit with 1 when the schemas differ, for CI |
+| `-config DIR` | Use another config directory |
+
+Connections open as in the app: SSH tunnels, keychain and environment passwords
+work, and missing passwords and unknown SSH host keys are asked on the terminal.
+Both sides should use the same engine; across engines only the report is useful.
+Changes an engine can't make in place (a column change on SQLite, a SQL Server
+default, a primary key) are written as comments to handle by hand.
+
 ## Formatting and external editor
 
 `:format` (`space f` in vim mode) reformats the statement under the cursor, or the
@@ -118,7 +189,7 @@ buffer.
 | File | Purpose |
 |---|---|
 | `~/.config/squi/connections.toml` | Connection profiles (no secrets) |
-| `~/.config/squi/settings.toml` | Preferences: `vim_mode`, `fetch_size`, `max_column_width`, `explorer_width`, `manual_transactions`, `confirm_all_writes_on_prod`, `history_limit`, `restore_session` |
+| `~/.config/squi/settings.toml` | Preferences: `vim_mode`, `fetch_size`, `max_column_width`, `explorer_width`, `manual_transactions`, `confirm_all_writes_on_prod`, `history_limit`, `restore_session`, `query_parameters` |
 | `~/.config/squi/snippets.toml` | Saved SQL snippets |
 | `~/.local/state/squi/history/` | Query history (JSONL) |
 | `~/.local/state/squi/session.json` | Open tabs and their SQL, restored at start |
