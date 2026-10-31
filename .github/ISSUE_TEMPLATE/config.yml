@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/farvisun/squi/security/advisories/new
+    about: Report security issues privately, not as a public issue.
+  - name: User guide
+    url: https://farvisun.github.io/squi/docs.html
+    about: Configuration, SSH, the safety model and every key binding.

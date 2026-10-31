@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in squi doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Connect to …
+        2. Run …
+        3. See …
+  - type: input
+    id: version
+    attributes:
+      label: squi version
+      description: Shown by `squi --version`.
+      placeholder: v0.5.0
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Database engine
+      multiple: true
+      options: [PostgreSQL, MySQL, MariaDB, ClickHouse, SQL Server / Azure SQL, SQLite, Not engine-specific]
+  - type: input
+    id: platform
+    attributes:
+      label: OS and terminal
+      placeholder: macOS 26, Ghostty
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error message or screenshot
+      description: Remove host names, passwords and data you don't want to share.
