@@ -173,6 +173,8 @@ type Settings struct {
 	MaxColumnWidth  int  `toml:"max_column_width"`
 	ExplorerWidth   int  `toml:"explorer_width"`
 	DefaultTxManual bool `toml:"manual_transactions"`
+	// QueryParameters asks for :name, $1 and ? placeholders before running.
+	QueryParameters bool `toml:"query_parameters"`
 	// RestoreSession reopens the previous run's tabs and queries.
 	RestoreSession bool `toml:"restore_session"`
 	// Keys overrides key bindings: action name -> list of keys.
@@ -182,13 +184,14 @@ type Settings struct {
 // DefaultSettings returns the built-in defaults.
 func DefaultSettings() Settings {
 	return Settings{
-		FetchSize:      1000,
-		VimMode:        true,
-		ConfirmProdAll: true,
-		HistoryLimit:   5000,
-		MaxColumnWidth: 40,
-		ExplorerWidth:  32,
-		RestoreSession: true,
+		FetchSize:       1000,
+		VimMode:         true,
+		ConfirmProdAll:  true,
+		HistoryLimit:    5000,
+		MaxColumnWidth:  40,
+		ExplorerWidth:   32,
+		RestoreSession:  true,
+		QueryParameters: true,
 	}
 }
 

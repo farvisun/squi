@@ -83,6 +83,7 @@ type Model struct {
 	editorPct   int
 
 	modals     []modal
+	paramVals  map[string]string // last value typed per query parameter (this run)
 	cmdline    *textinput.Model
 	winPrefix  bool
 	toastText  string

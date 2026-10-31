@@ -61,19 +61,19 @@ func (m *Model) runCurrent(t *tab) tea.Cmd {
 			stmts[i].End += a
 			stmts[i].Line, stmts[i].Col = sqltext.LineCol(src, stmts[i].Start)
 		}
-		return m.execute(t, stmts, runOpts{src: src})
+		return m.withParams(t, stmts, runOpts{src: src})
 	}
 	st, ok := sqltext.StatementAt(src, t.editor.CursorOffset(), d)
 	if !ok {
 		return m.toast("Nothing to run", toastWarn)
 	}
-	return m.execute(t, []sqltext.Statement{st}, runOpts{src: src})
+	return m.withParams(t, []sqltext.Statement{st}, runOpts{src: src})
 }
 
 // runAll runs every statement in the editor.
 func (m *Model) runAll(t *tab) tea.Cmd {
 	src := t.editor.Value()
-	return m.execute(t, sqltext.Split(src, t.ac.driver()), runOpts{src: src})
+	return m.withParams(t, sqltext.Split(src, t.ac.driver()), runOpts{src: src})
 }
 
 // execute applies the safety rules, then runs stmts.
