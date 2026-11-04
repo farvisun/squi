@@ -34,7 +34,6 @@ func spanAt(spans []hitSpan, x int) int {
 type frame struct {
 	explorer, editor, output rect // outer boxes; empty when not shown
 	tabBar                   tabBarHits
-	outTabs                  []hitSpan // output sub-tabs, on the row below output's top border
 	status                   []statusHit
 	modal                    rect // the topmost modal
 }
@@ -265,30 +264,268 @@ func (m *Model) mouseExplorer(t *tab, ev mouseEvent) tea.Cmd {
 	r := m.frame.explorer
 	switch ev.btn {
 	case tea.MouseButtonWheelUp, tea.MouseButtonWheelDown:
-		e.ix = clampIx(e.ix+ev.delta(), len(e.flat))
+		e.scrollView(ev.delta())
 	case tea.MouseButtonLeft:
 		return e.click(m, ev.y-r.y-1, ev.x-r.x)
+	case tea.MouseButtonRight:
+		if i := e.rowAt(ev.y - r.y - 1); i >= 0 {
+			e.ix = i
+			e.menu(m, ev.x, ev.y)
+		}
+	}
+	return nil
+}
+
+// contextMenu opens the focused pane's menu, for keyboards and for terminals
+// that keep right-click for themselves.
+func (m *Model) contextMenu(t *tab) tea.Cmd {
+	switch m.focus {
+	case focusExplorer:
+		if e := t.ac.explorer; e != nil {
+			r := m.frame.explorer
+			e.menu(m, r.x+2, r.y+2)
+		}
+	case focusEditor:
+		r := m.frame.editor
+		m.editorMenu(t, r.x+2, r.y+2)
+	case focusOutput:
+		if p, ok := t.out.current().(*resultPanel); ok {
+			r := m.frame.output
+			p.menu(m, t, r.x+2, r.y+2)
+		}
 	}
 	return nil
 }
 
 func (m *Model) mouseEditor(t *tab, ev mouseEvent) tea.Cmd {
-	if !ev.wheel {
-		m.focus = focusEditor
+	r := m.frame.editor
+	x, y := ev.x-r.x-1, ev.y-r.y-1
+	item, onPopup := t.editor.CompletionHit(x, y)
+	if ev.wheel {
+		switch d := ev.delta(); {
+		case onPopup:
+			t.editor.ScrollCompletion(d / wheelStep)
+		case ev.alt && d != 0:
+			t.editor.ScrollColumns(d)
+		case d != 0:
+			t.editor.ScrollView(d)
+		case ev.btn == tea.MouseButtonWheelLeft:
+			t.editor.ScrollColumns(-wheelStep)
+		case ev.btn == tea.MouseButtonWheelRight:
+			t.editor.ScrollColumns(wheelStep)
+		}
+		return nil
+	}
+	m.focus = focusEditor
+	if x < 0 || y < 0 || x >= r.w-2 || y >= r.h-2 {
+		return nil // the border only focuses
+	}
+	switch ev.btn {
+	case tea.MouseButtonLeft:
+		if onPopup {
+			if item >= 0 {
+				t.editor.AcceptCompletionAt(item)
+			}
+			return nil
+		}
+		t.editor.MouseDown(x, y, ev.clicks)
+		m.startDrag(&dragState{bounds: rect{r.x + 1, r.y + 1, r.w - 2, r.h - 2}, move: func(px, py int) tea.Cmd {
+			t.editor.MouseDrag(px-r.x-1, py-r.y-1)
+			return nil
+		}})
+	case tea.MouseButtonRight:
+		if !t.editor.SelectionContains(x, y) {
+			t.editor.MouseDown(x, y, 1)
+		}
+		m.editorMenu(t, ev.x, ev.y)
 	}
 	return nil
 }
 
+// editorMenu opens the editor's context menu at (x, y).
+func (m *Model) editorMenu(t *tab, x, y int) {
+	m.pushMenu("Query", []menuItem{
+		{"x", "Cut", func() tea.Cmd {
+			if s, ok := t.editor.CutSelection(); ok {
+				return m.copy(s, "text")
+			}
+			return nil
+		}},
+		{"y", "Copy", func() tea.Cmd {
+			if s, ok := t.editor.CopySelection(); ok {
+				return m.copy(s, "text")
+			}
+			return nil
+		}},
+		{"v", "Paste", func() tea.Cmd {
+			t.editor.Paste(pasteText(t.editor.Register()))
+			return nil
+		}},
+		{"a", "Select all", func() tea.Cmd { t.editor.SelectAll(); return nil }},
+		{"r", "Run", func() tea.Cmd { return m.runCurrent(t) }},
+		{"f", "Format", func() tea.Cmd { return m.formatSQL(t) }},
+	}, x, y)
+}
+
 func (m *Model) mouseOutput(t *tab, ev mouseEvent) tea.Cmd {
+	r := m.frame.output
 	if !ev.wheel {
 		m.focus = focusOutput
+	}
+	ox, oy := r.x+1, r.y+2 // inside the border, below the sub-tabs
+	x := ev.x - ox
+	if ev.y == r.y+1 { // the sub-tab strip
+		i := spanAt(t.out.spans, x)
+		switch ev.btn {
+		case tea.MouseButtonWheelUp:
+			t.out.ix = (t.out.ix - 1 + len(t.out.panels)) % len(t.out.panels)
+		case tea.MouseButtonWheelDown:
+			t.out.ix = (t.out.ix + 1) % len(t.out.panels)
+		case tea.MouseButtonLeft:
+			if i >= 0 {
+				t.out.ix = i
+			}
+		case tea.MouseButtonMiddle:
+			if i >= 0 {
+				return t.out.closePanel(m, t.out.panels[i])
+			}
+		case tea.MouseButtonRight:
+			if i >= 0 {
+				p := t.out.panels[i]
+				m.pushMenu(stripANSI(p.title()), []menuItem{
+					{"x", "Close", func() tea.Cmd { return t.out.closePanel(m, p) }},
+				}, ev.x, ev.y)
+			}
+		}
 		return nil
 	}
-	if s, ok := t.out.current().(scroller); ok {
+	if !ev.wheel && (x < 0 || x >= r.w-2 || ev.y == r.y || ev.y >= r.y+r.h-1) {
+		return nil // the border only focuses
+	}
+	p := t.out.current()
+	if mp, ok := p.(mousePanel); ok {
+		return mp.mouse(m, t, ev, ox, oy)
+	}
+	if s, ok := p.(scroller); ok && ev.delta() != 0 {
 		s.scroll(ev.delta())
 	}
-	if r, ok := t.out.current().(*resultPanel); ok {
-		return r.maybeFetch(m, t)
+	return nil
+}
+
+// gridHooks are what a panel does with grid gestures; any may be nil.
+type gridHooks struct {
+	sort  func() tea.Cmd // header clicked; the cursor is on that column
+	open  func() tea.Cmd // cell double-clicked
+	fetch func() tea.Cmd // the view moved, more rows may be wanted
+	menu  func(x, y int) // right-click at a screen position
+}
+
+// mouseGrid handles wheel, click, range and column gestures on a grid whose
+// top-left cell is at screen position (ox, oy).
+func (m *Model) mouseGrid(g *components.Grid, ev mouseEvent, ox, oy int, h gridHooks) tea.Cmd {
+	fetch := func() tea.Cmd {
+		if h.fetch != nil {
+			return h.fetch()
+		}
+		return nil
+	}
+	if ev.wheel {
+		d := ev.delta()
+		switch {
+		case ev.btn == tea.MouseButtonWheelLeft:
+			g.ScrollColumns(-1)
+		case ev.btn == tea.MouseButtonWheelRight:
+			g.ScrollColumns(1)
+		case ev.alt && d != 0:
+			g.ScrollColumns(d / wheelStep)
+		case d != 0:
+			g.Scroll(d)
+		}
+		return fetch()
+	}
+	hit := g.HitTest(ev.x-ox, ev.y-oy)
+	w, ht := g.Size()
+	bounds := rect{ox, oy, w, ht}
+	switch ev.btn {
+	case tea.MouseButtonLeft:
+		switch hit.Zone {
+		case components.GridColEdge:
+			if ev.clicks == 2 {
+				g.AutofitColumn(hit.Col)
+				return nil
+			}
+			m.startDrag(&dragState{move: func(x, _ int) tea.Cmd {
+				g.ResizeColumn(hit.Col, x-ox-hit.X0-2)
+				return nil
+			}})
+		case components.GridHeader:
+			g.SetCursorCol(hit.Col)
+			if h.sort != nil {
+				return h.sort()
+			}
+		case components.GridGutter:
+			g.PressRow(hit.Row)
+			m.startDrag(&dragState{bounds: bounds, move: func(x, y int) tea.Cmd {
+				g.DragTo(x-ox, y-oy)
+				return fetch()
+			}})
+		case components.GridCell:
+			g.PressCell(hit.Row, hit.Col)
+			if ev.clicks >= 2 {
+				if h.open != nil {
+					return h.open()
+				}
+				return nil
+			}
+			m.startDrag(&dragState{bounds: bounds, move: func(x, y int) tea.Cmd {
+				g.DragTo(x-ox, y-oy)
+				return fetch()
+			}})
+		}
+	case tea.MouseButtonRight:
+		if hit.Zone == components.GridCell && h.menu != nil {
+			if !g.InRange(hit.Row, hit.Col) {
+				g.PressCell(hit.Row, hit.Col)
+			}
+			h.menu(ev.x, ev.y)
+		}
+	}
+	return nil
+}
+
+// mouseText handles wheel, selection and the context menu of a text view
+// whose top-left cell is at screen position (ox, oy).
+func (m *Model) mouseText(tv *components.TextView, ev mouseEvent, ox, oy int) tea.Cmd {
+	if ev.wheel {
+		d := ev.delta()
+		switch {
+		case ev.btn == tea.MouseButtonWheelLeft:
+			tv.ScrollColumns(-4)
+		case ev.btn == tea.MouseButtonWheelRight:
+			tv.ScrollColumns(4)
+		case ev.alt && d != 0:
+			tv.ScrollColumns(d)
+		case d != 0:
+			tv.Scroll(d)
+		}
+		return nil
+	}
+	switch ev.btn {
+	case tea.MouseButtonLeft:
+		tv.PressAt(ev.x-ox, ev.y-oy)
+		w, h := tv.Size()
+		m.startDrag(&dragState{bounds: rect{ox, oy, w, h}, move: func(x, y int) tea.Cmd {
+			tv.DragTo(x-ox, y-oy)
+			return nil
+		}})
+	case tea.MouseButtonRight:
+		label := "Copy all"
+		if _, ok := tv.Selected(); ok {
+			label = "Copy selection"
+		}
+		m.pushMenu("Text", []menuItem{
+			{"y", label, func() tea.Cmd { return m.copy(tv.CopyText(), "text") }},
+		}, ev.x, ev.y)
 	}
 	return nil
 }

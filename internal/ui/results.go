@@ -142,6 +142,65 @@ func (r *resultPanel) status() string {
 
 func (r *resultPanel) scroll(n int) { r.grid.Scroll(n) }
 
+func (r *resultPanel) mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd {
+	return m.mouseGrid(r.grid, ev, ox, oy, gridHooks{
+		fetch: func() tea.Cmd { return r.maybeFetch(m, t) },
+		sort: func() tea.Cmd {
+			if r.browse != nil {
+				return m.browseSort(t, r)
+			}
+			r.grid.ToggleSort()
+			return nil
+		},
+		open: func() tea.Cmd { return r.act(m, t, "results.inspect") },
+		menu: func(x, y int) { r.menu(m, t, x, y) },
+	})
+}
+
+// menu opens the context menu of the cell under the cursor.
+func (r *resultPanel) menu(m *Model, t *tab, x, y int) {
+	action := func(name, label string) menuItem {
+		return menuItem{m.keys.First(name), label, func() tea.Cmd { return r.act(m, t, name) }}
+	}
+	var items []menuItem
+	if r.grid.Ranged() {
+		items = append(items, menuItem{m.keys.First("results.copy_cell"), "Copy selection", func() tea.Cmd { return r.copyRange(m) }})
+	} else {
+		items = append(items, action("results.copy_cell", "Copy cell"), action("results.copy_row", "Copy row"))
+	}
+	items = append(items,
+		action("results.copy_menu", "Copy as…"),
+		menuItem{"=", "Filter by this value", func() tea.Cmd { return r.filterByCell(m, t) }},
+		action("results.inspect", "Inspect cell"),
+		action("results.record", "View row as record"),
+		action("results.edit", "Edit cell"),
+		action("results.follow_fk", "Follow foreign key"),
+		action("results.referencing", "Rows referencing this row"),
+		action("results.freeze", "Freeze or unfreeze columns"),
+	)
+	m.pushMenu("Result", items, x, y)
+}
+
+// filterByCell keeps the rows holding the value of the cursor cell: on the
+// server for a browsed table, among the loaded rows otherwise.
+func (r *resultPanel) filterByCell(m *Model, t *tab) tea.Cmd {
+	row, col := r.grid.Cursor()
+	if row < 0 || col >= len(r.cols) {
+		return nil
+	}
+	v, _ := r.cellValue(row, col)
+	if r.browse != nil {
+		b := *r.browse
+		b.Where = t.ac.dialect().Equals([]string{r.cols[col].Name}, []db.Cell{v})
+		return m.showFrame(t, r, browseFrameFor(t.ac.dialect(), b), r.back, false)
+	}
+	if v.Null {
+		return m.toast("NULL can only be filtered on a table opened from the explorer", toastWarn)
+	}
+	r.grid.SetFilter(v.S)
+	return nil
+}
+
 func (r *resultPanel) view(w, h int, focused bool) string {
 	if focused {
 		r.grid.Focus()
@@ -190,8 +249,13 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	if r.grid.Update(km) {
 		return r.maybeFetch(m, t)
 	}
+	return r.act(m, t, m.keys.Action(keymap.Results, k))
+}
+
+// act runs a results action for a key or a context menu.
+func (r *resultPanel) act(m *Model, t *tab, action string) tea.Cmd {
 	row, col := r.grid.Cursor()
-	switch m.keys.Action(keymap.Results, k) {
+	switch action {
 	case "results.inspect":
 		if row >= 0 {
 			v, _ := r.cellValue(row, col)
@@ -202,6 +266,9 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 			return m.showRecord(r, row)
 		}
 	case "results.copy_cell":
+		if cmd := r.copyRange(m); cmd != nil {
+			return cmd
+		}
 		if row >= 0 {
 			v, _ := r.cellValue(row, col)
 			if v.Null {
@@ -210,6 +277,9 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 			return m.copy(v.S, "cell")
 		}
 	case "results.copy_row":
+		if cmd := r.copyRange(m); cmd != nil {
+			return cmd
+		}
 		if row >= 0 {
 			return m.copy(dataio.FormatRows(dataio.FormatTSV, r.cols, [][]db.Cell{r.effectiveRow(row)}, m.exportOpts(r.source)), "row")
 		}
@@ -227,6 +297,9 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	case "results.local_filter":
 		return r.localFilter(m)
 	case "results.clear_filter":
+		if r.grid.ClearRange() {
+			return nil
+		}
 		if r.grid.Filter() != "" {
 			r.grid.SetFilter("")
 		} else if r.browse != nil && r.browse.Where != "" {
@@ -237,6 +310,11 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 			return m.browseSort(t, r)
 		}
 		r.grid.ToggleSort()
+	case "results.freeze":
+		if r.grid.ToggleFreeze() {
+			return m.toast("Columns frozen up to "+r.cols[col].Name, toastInfo)
+		}
+		return m.toast("Columns unfrozen", toastInfo)
 	case "results.follow_fk":
 		return m.followFK(t, r)
 	case "results.referencing":
@@ -269,6 +347,42 @@ func (r *resultPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 		return m.saveEdits(t, r)
 	}
 	return nil
+}
+
+// rangeRows returns the cells of the selected range and its columns.
+func (r *resultPanel) rangeCells() ([]db.ResultColumn, [][]db.Cell, bool) {
+	rows, cols, ok := r.grid.RangeSelection()
+	if !ok {
+		return nil, nil, false
+	}
+	rc := make([]db.ResultColumn, 0, len(cols))
+	for _, c := range cols {
+		if c < len(r.cols) {
+			rc = append(rc, r.cols[c])
+		}
+	}
+	out := make([][]db.Cell, 0, len(rows))
+	for _, row := range rows {
+		cells := make([]db.Cell, 0, len(cols))
+		for _, c := range cols {
+			if c < len(r.cols) {
+				v, _ := r.cellValue(row, c)
+				cells = append(cells, v)
+			}
+		}
+		out = append(out, cells)
+	}
+	return rc, out, true
+}
+
+// copyRange copies the selected range as TSV; nil when nothing is selected.
+func (r *resultPanel) copyRange(m *Model) tea.Cmd {
+	cols, rows, ok := r.rangeCells()
+	if !ok {
+		return nil
+	}
+	o := m.exportOpts(r.source)
+	return m.copy(strings.TrimRight(dataio.FormatRows(dataio.FormatTSV, cols, rows, o), "\n"), "selection")
 }
 
 // localFilter filters the loaded rows by text.

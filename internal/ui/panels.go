@@ -17,6 +17,23 @@ import (
 // subTabs renders a row of inner tab labels, abbreviating unselected
 // labels to their number when they do not fit in w.
 func subTabs(names []string, ix, w int) string {
+	return strings.Join(subTabLabels(names, ix, w), "  ")
+}
+
+// subTabSpans returns where each label of subTabs falls, x counted from the
+// row's start.
+func subTabSpans(names []string, ix, w int) []hitSpan {
+	var out []hitSpan
+	x := 0
+	for i, l := range subTabLabels(names, ix, w) {
+		lw := lipgloss.Width(l)
+		out = append(out, hitSpan{x, x + lw, i})
+		x += lw + 2
+	}
+	return out
+}
+
+func subTabLabels(names []string, ix, w int) []string {
 	full := 0
 	for i, n := range names {
 		full += len(fmt.Sprintf("%d %s", i+1, n)) + 2
@@ -34,15 +51,15 @@ func subTabs(names []string, ix, w int) string {
 			parts[i] = theme.Dim.Render(label)
 		}
 	}
-	return strings.Join(parts, "  ")
+	return parts
 }
 
 // subTabKey handles 1-9 and </> for inner tab switching.
 func subTabKey(k string, ix, n int) (int, bool) {
 	switch k {
-	case ">", "L":
+	case ">":
 		return (ix + 1) % n, true
-	case "<", "H":
+	case "<":
 		return (ix - 1 + n) % n, true
 	}
 	if len(k) == 1 && k[0] >= '1' && k[0] <= '9' {
@@ -77,6 +94,7 @@ func dbTableGrid(t *db.Table, maxW int) *components.Grid {
 // ---- table detail ----
 
 type detailPanel struct {
+	width  int
 	ac     *activeConn
 	ref    db.ObjectRef
 	d      *db.TableDetail
@@ -170,18 +188,14 @@ func (p *detailPanel) isDDL() bool { return p.ix == len(p.names)-1 }
 func (p *detailPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	k := km.String()
 	if ix, ok := subTabKey(k, p.ix, len(p.names)); ok {
-		p.ix = ix
-		if p.isDDL() && p.ddl == nil && p.ddlErr == "" {
-			return p.loadDDL()
-		}
-		return nil
+		return p.selectTab(ix)
 	}
 	if p.isDDL() {
 		if p.ddl == nil {
 			return nil
 		}
 		if k == "y" {
-			return m.copy(p.ddl.Text(), "DDL")
+			return m.copy(p.ddl.CopyText(), "DDL")
 		}
 		if k == "e" {
 			return m.appendToEditor(p.ddl.Text())
@@ -239,7 +253,42 @@ func (p *detailPanel) scroll(n int) {
 	p.grids[p.ix].Scroll(n)
 }
 
+func (p *detailPanel) selectTab(ix int) tea.Cmd {
+	p.ix = ix
+	if p.isDDL() && p.ddl == nil && p.ddlErr == "" {
+		return p.loadDDL()
+	}
+	return nil
+}
+
+func (p *detailPanel) mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd {
+	if ev.y == oy {
+		if i := spanAt(subTabSpans(p.names, p.ix, p.width), ev.x-ox); i >= 0 && ev.btn == tea.MouseButtonLeft {
+			return p.selectTab(i)
+		}
+		return nil
+	}
+	if p.isDDL() {
+		if p.ddl != nil {
+			return m.mouseText(p.ddl, ev, ox, oy+1)
+		}
+		return nil
+	}
+	g := p.grids[p.ix]
+	return m.mouseGrid(g, ev, ox, oy+1, gridHooks{
+		sort: func() tea.Cmd { g.ToggleSort(); return nil },
+		open: func() tea.Cmd {
+			row, col := g.Cursor()
+			if row < 0 {
+				return nil
+			}
+			return m.inspectCell(db.ResultColumn{Name: g.Columns[col]}, g.Rows()[row][col])
+		},
+	})
+}
+
 func (p *detailPanel) view(w, h int, focused bool) string {
+	p.width = w
 	head := components.FitStyled(subTabs(p.names, p.ix, w), w)
 	if p.isDDL() {
 		switch {
@@ -273,7 +322,7 @@ func (p *textPanel) title() string { return p.name }
 func (p *textPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	switch km.String() {
 	case "y":
-		return m.copy(p.tv.Text(), "text")
+		return m.copy(p.tv.CopyText(), "text")
 	case "e":
 		return m.appendToEditor(p.tv.Text())
 	}
@@ -282,6 +331,10 @@ func (p *textPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 }
 
 func (p *textPanel) scroll(n int) { p.tv.Scroll(n) }
+
+func (p *textPanel) mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd {
+	return m.mouseText(p.tv, ev, ox, oy)
+}
 
 func (p *textPanel) view(w, h int, focused bool) string {
 	p.tv.SetSize(w, h)
@@ -296,6 +349,7 @@ type planRow struct {
 }
 
 type explainPanel struct {
+	treeH     int
 	sql       string
 	root      *db.PlanNode
 	analyze   bool
@@ -369,11 +423,7 @@ func (p *explainPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	case "g":
 		p.ix = 0
 	case "enter", " ", "l", "h", "left", "right":
-		n := p.flat[p.ix].n
-		if len(n.Children) > 0 {
-			p.collapsed[n] = !p.collapsed[n]
-			p.rebuild()
-		}
+		p.toggle()
 	case "r":
 		p.raw = true
 	case "y":
@@ -382,7 +432,40 @@ func (p *explainPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// toggle collapses or expands the selected plan node.
+func (p *explainPanel) toggle() {
+	n := p.flat[p.ix].n
+	if len(n.Children) > 0 {
+		p.collapsed[n] = !p.collapsed[n]
+		p.rebuild()
+	}
+}
+
 func (p *explainPanel) scroll(n int) { p.ix = clampIx(p.ix+n, len(p.flat)) }
+
+func (p *explainPanel) mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd {
+	if p.raw {
+		return m.mouseText(p.rawView, ev, ox, oy)
+	}
+	if ev.wheel {
+		if d := ev.delta(); d != 0 {
+			p.scroll(d)
+		}
+		return nil
+	}
+	row := ev.y - oy
+	i := p.top + row
+	if ev.btn != tea.MouseButtonLeft || row < 0 || row >= p.treeH || i >= len(p.flat) {
+		return nil
+	}
+	arrow := 2 * p.flat[i].depth
+	x := ev.x - ox
+	p.ix = i
+	if ev.clicks == 2 || (x >= arrow && x < arrow+2) {
+		p.toggle()
+	}
+	return nil
+}
 
 func (p *explainPanel) heat(n *db.PlanNode) lipgloss.Style {
 	share := 0.0
@@ -425,6 +508,7 @@ func (p *explainPanel) view(w, h int, focused bool) string {
 	sel := p.flat[p.ix].n
 	detailH := min(len(sel.Details)+1, h/2)
 	treeH := h - detailH
+	p.treeH = treeH
 	if p.ix < p.top {
 		p.top = p.ix
 	}
@@ -467,6 +551,7 @@ func (p *explainPanel) view(w, h int, focused bool) string {
 // ---- admin ----
 
 type adminPanel struct {
+	width    int
 	ac       *activeConn
 	names    []string
 	tables   []*db.Table
@@ -549,9 +634,9 @@ func (p *adminPanel) store(msg adminMsg, maxW int) {
 		f := g.Filter()
 		ng := dbTableGrid(msg.table, maxW)
 		ng.SetFilter(f)
-		for i := 0; i < row; i++ {
-			ng.Scroll(1)
-		}
+		ng.SetSize(g.Size())
+		ng.CopyLayout(g)
+		ng.SetCursorView(row)
 		p.grids[msg.ix] = ng
 		return
 	}
@@ -581,11 +666,7 @@ func (p *adminPanel) selectedID() (string, bool) {
 func (p *adminPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	k := km.String()
 	if ix, ok := subTabKey(k, p.ix, len(p.names)); ok {
-		p.ix = ix
-		if p.tables[ix] == nil {
-			return p.load(ix)
-		}
-		return nil
+		return p.selectTab(ix)
 	}
 	g := p.grids[p.ix]
 	if g != nil && g.Update(km) {
@@ -593,7 +674,7 @@ func (p *adminPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	}
 	adm := p.ac.conn.Admin()
 	switch k {
-	case "r", "f5":
+	case "r":
 		return p.load(p.ix)
 	case "a":
 		p.auto = !p.auto
@@ -662,7 +743,33 @@ func (p *adminPanel) scroll(n int) {
 	}
 }
 
+func (p *adminPanel) selectTab(ix int) tea.Cmd {
+	p.ix = ix
+	if p.tables[ix] == nil {
+		return p.load(ix)
+	}
+	return nil
+}
+
+func (p *adminPanel) mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd {
+	if ev.y == oy {
+		if i := spanAt(subTabSpans(p.names, p.ix, p.width-40), ev.x-ox); i >= 0 && ev.btn == tea.MouseButtonLeft {
+			return p.selectTab(i)
+		}
+		return nil
+	}
+	g := p.grids[p.ix]
+	if g == nil {
+		return nil
+	}
+	return m.mouseGrid(g, ev, ox, oy+1, gridHooks{
+		sort: func() tea.Cmd { g.ToggleSort(); return nil },
+		open: func() tea.Cmd { return p.update(m, t, tea.KeyMsg{Type: tea.KeyEnter}) },
+	})
+}
+
 func (p *adminPanel) view(w, h int, focused bool) string {
+	p.width = w
 	head := subTabs(p.names, p.ix, w-40)
 	hint := ""
 	if p.ix == adminProcesses {

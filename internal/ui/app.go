@@ -697,6 +697,8 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 		return m.openExternalEditor(t)
 	case "tx_menu":
 		return m.txMenu(t)
+	case "context_menu":
+		return m.contextMenu(t)
 	case "cancel":
 		if t.busy {
 			return m.cancel(t)
@@ -734,9 +736,11 @@ func typingKey(k string) bool {
 	return len([]rune(k)) == 1 || k == "tab" || k == "alt+left" || k == "alt+right"
 }
 
+// hasFilter reports whether esc has something to clear in the output pane:
+// a selected range or a filter.
 func (o *output) hasFilter() bool {
 	if r, ok := o.current().(*resultPanel); ok {
-		return r.grid.Filter() != "" || (r.browse != nil && r.browse.Where != "")
+		return r.grid.Ranged() || r.grid.Filter() != "" || (r.browse != nil && r.browse.Where != "")
 	}
 	return false
 }

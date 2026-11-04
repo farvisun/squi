@@ -18,6 +18,10 @@ type TextView struct {
 	width, height int
 	focused       bool
 	pendingG      bool
+
+	// a selection runs from the anchor to the head, as (line, display cell)
+	selOn      bool
+	selA, selH cellPos
 }
 
 // NewTextView creates a text view. If lexer is non-empty, the text is
@@ -37,10 +41,14 @@ func (t *TextView) SetText(text, lexer string) {
 		t.lines = strings.Split(strings.ReplaceAll(text, "\t", "    "), "\n")
 	}
 	t.top, t.left = 0, 0
+	t.selOn = false
 }
 
 // SetStyledLines sets pre-rendered lines.
-func (t *TextView) SetStyledLines(raw string, lines []string) { t.raw, t.lines = raw, lines }
+func (t *TextView) SetStyledLines(raw string, lines []string) {
+	t.raw, t.lines = raw, lines
+	t.selOn = false
+}
 
 // LineCount returns the number of lines.
 func (t *TextView) LineCount() int { return len(t.lines) }
@@ -50,6 +58,9 @@ func (t *TextView) Text() string { return t.raw }
 
 // SetSize sets the size.
 func (t *TextView) SetSize(w, h int) { t.width, t.height = w, h }
+
+// Size returns the size.
+func (t *TextView) Size() (int, int) { return t.width, t.height }
 
 // Focus / Blur.
 func (t *TextView) Focus() { t.focused = true }
@@ -105,7 +116,7 @@ func (t *TextView) clamp() {
 func (t *TextView) View() string {
 	out := make([]string, 0, t.height)
 	for i := t.top; i < len(t.lines) && i < t.top+t.height; i++ {
-		l := t.lines[i]
+		l := t.selected(i)
 		if t.left > 0 {
 			l = ansi.TruncateLeft(l, t.left, "")
 		}

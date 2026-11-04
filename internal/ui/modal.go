@@ -260,15 +260,24 @@ func (mm *menuModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
 }
 
 func (mm *menuModal) view(w, h int) string {
+	kw, lw := 0, lipgloss.Width(mm.title)+2
+	for _, it := range mm.items {
+		kw = max(kw, lipgloss.Width(it.key))
+		lw = max(lw, lipgloss.Width(it.label))
+	}
+	bw := min(w-4, 52)
+	if mm.at { // a context menu is only as wide as it needs to be
+		bw = min(bw, kw+lw+6)
+	}
 	var lines []string
 	for i, it := range mm.items {
-		line := " " + theme.Key.Render(it.key) + "  " + it.label + " "
+		line := " " + theme.Key.Render(components.Fit(it.key, kw)) + "  " + it.label + " "
 		if i == mm.ix {
-			line = lipgloss.NewStyle().Background(theme.SelBg).Render(components.Fit(stripANSI(line), 48))
+			line = lipgloss.NewStyle().Background(theme.SelBg).Render(components.Fit(stripANSI(line), bw-2))
 		}
 		lines = append(lines, line)
 	}
-	return modalBox(mm.title, strings.Join(lines, "\n"), min(w-4, 52), theme.Accent)
+	return modalBox(mm.title, strings.Join(lines, "\n"), bw, theme.Accent)
 }
 
 // ---- scrollable text (cell inspector, SQL preview, help) ----
@@ -298,15 +307,15 @@ func (t *textModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
 		case "esc", "q", "enter", "ctrl+c":
 			return true, nil
 		case "y":
-			return false, m.copy(t.tv.Text(), "text")
+			return false, m.copy(t.tv.CopyText(), "text")
 		}
 		t.tv.Update(msg)
 	case tea.MouseMsg:
-		if msg.Button == tea.MouseButtonWheelUp {
-			t.tv.Scroll(-3)
-		} else if msg.Button == tea.MouseButtonWheelDown {
-			t.tv.Scroll(3)
-		}
+		// msg is box-local; mouseText works in screen coordinates
+		box := m.frame.modal
+		ev := mouseEvent{x: msg.X + box.x, y: msg.Y + box.y, btn: msg.Button, alt: msg.Alt,
+			wheel: tea.MouseEvent(msg).IsWheel(), clicks: m.clicks.count}
+		return false, m.mouseText(t.tv, ev, box.x+1, box.y+1)
 	}
 	return false, nil
 }

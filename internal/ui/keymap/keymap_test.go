@@ -30,7 +30,7 @@ func TestDefaultsAreUnique(t *testing.T) {
 		}
 	}
 	m := Default()
-	if m.Action(Global, "f5") != "run" || m.Action(Results, "f5") != "results.rerun" || m.Action(Explorer, "*") != "explorer.pin" {
+	if m.Action(Global, "f5") != "run" || m.Action(Results, "r") != "results.rerun" || m.Action(Explorer, "*") != "explorer.pin" {
 		t.Fatal("default lookups")
 	}
 }

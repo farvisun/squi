@@ -60,6 +60,7 @@ func (n *node) expandable() bool {
 
 // explorer is the database object tree of one connection.
 type explorer struct {
+	height  int // rows of tree shown by the last render
 	ac      *activeConn
 	roots   []*node
 	flat    []*node
@@ -438,7 +439,9 @@ func (e *explorer) update(m *Model, km tea.KeyMsg) tea.Cmd {
 		if e.filter != "" {
 			e.filter = ""
 			e.rebuild()
+			return nil
 		}
+		m.focus = focusEditor
 		return nil
 	default:
 		return e.action(m, n, m.keys.Action(keymap.Explorer, k))
@@ -527,15 +530,60 @@ func (e *explorer) action(m *Model, n *node, act string) tea.Cmd {
 
 const doubleClick = 400 * time.Millisecond
 
+// scrollView moves the view by n rows, keeping the selection on screen.
+func (e *explorer) scrollView(n int) {
+	h := max(1, e.height)
+	e.top = max(0, min(e.top+n, max(0, len(e.flat)-h)))
+	e.ix = clampIx(max(e.top, min(e.ix, e.top+h-1)), len(e.flat))
+}
+
+// rowAt returns the index in flat of a row of the pane's content, or -1.
+func (e *explorer) rowAt(row int) int {
+	if e.filter != "" {
+		row-- // the filter line sits above the tree
+	}
+	if i := e.top + row; row >= 0 && i < len(e.flat) {
+		return i
+	}
+	return -1
+}
+
+// menu opens the context menu of the selected node at (x, y).
+func (e *explorer) menu(m *Model, x, y int) {
+	n := e.selected()
+	if n == nil {
+		return
+	}
+	item := func(action, label string) menuItem {
+		return menuItem{m.keys.First(action), label, func() tea.Cmd { return e.action(m, n, action) }}
+	}
+	var items []menuItem
+	if n.kind == nObject {
+		items = append(items,
+			item("explorer.open", "Open table data"),
+			item("explorer.open_tab", "Open in new tab"),
+			item("explorer.details", "Details"),
+			item("explorer.ddl", "Show DDL"),
+			item("explorer.insert_select", "Insert SELECT"),
+			item("explorer.copy_name", "Copy name"),
+			item("explorer.export", "Export"),
+			item("explorer.import", "Import CSV"),
+			item("explorer.pin", "Pin or unpin"),
+		)
+	}
+	if n.kind == nDatabase || n.kind == nSchema {
+		items = append(items, item("explorer.use", "Use in this tab"), item("explorer.copy_name", "Copy name"))
+	}
+	items = append(items, item("explorer.filter", "Filter"), item("explorer.refresh", "Refresh"))
+	m.pushMenu(n.label, items, x, y)
+}
+
 // click handles a left click at row/x inside the explorer pane. Clicking the
 // arrow (or a selected database/schema/group) expands it; double-clicking a
 // table or view opens its rows in a new tab.
 func (e *explorer) click(m *Model, row, x int) tea.Cmd {
-	if e.filter != "" {
-		row-- // the filter line sits above the tree
-	}
-	i := e.top + row
-	if row < 0 || i >= len(e.flat) {
+	i := e.rowAt(row)
+	if i < 0 {
 		return nil
 	}
 	n := e.flat[i]
@@ -571,19 +619,24 @@ func (e *explorer) click(m *Model, row, x int) tea.Cmd {
 }
 
 func (e *explorer) view(w, h int, focused bool, current string) string {
+	var lines []string
+	if e.filter != "" {
+		lines = append(lines, theme.Warn.Render(components.Fit("filter: "+e.filter+"  (esc clears)", w)))
+		h--
+	}
+	e.height = h
 	if e.ix < e.top {
 		e.top = e.ix
 	}
 	if e.ix >= e.top+h {
 		e.top = e.ix - h + 1
 	}
-	var lines []string
-	if e.filter != "" {
-		lines = append(lines, theme.Warn.Render(components.Fit("filter: "+e.filter+"  (esc clears)", w)))
-		h--
-	}
 	if len(e.flat) == 0 {
-		lines = append(lines, theme.Dim.Render(" loading…"))
+		if e.filter != "" {
+			lines = append(lines, theme.Dim.Render(" no matches among loaded items"))
+		} else {
+			lines = append(lines, theme.Dim.Render(" loading…"))
+		}
 	}
 	for i := e.top; i < len(e.flat) && i < e.top+h; i++ {
 		n := e.flat[i]

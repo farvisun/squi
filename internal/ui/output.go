@@ -22,11 +22,18 @@ type panel interface {
 // scroller is implemented by panels that react to the mouse wheel.
 type scroller interface{ scroll(n int) }
 
+// mousePanel is implemented by panels with mouse handling beyond the wheel.
+// (ox, oy) is the screen position of the panel's top-left cell.
+type mousePanel interface {
+	mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd
+}
+
 // output is the lower right pane: result sets, messages, details, plans.
 type output struct {
 	panels []panel
 	ix     int
 	msgs   *messagesPanel
+	spans  []hitSpan // sub-tab positions of the last render, x from the pane's content
 }
 
 func newOutput() *output {
@@ -106,16 +113,7 @@ func (o *output) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 		o.ix = (o.ix - 1 + len(o.panels)) % len(o.panels)
 		return nil
 	case "output.close":
-		if p := o.current(); p != nil {
-			if r, ok := p.(*resultPanel); ok && r.dirty() {
-				return m.toast("Panel has unsaved edits (u to revert)", toastWarn)
-			}
-			o.remove(p)
-			if r, ok := p.(*resultPanel); ok {
-				r.closeStream()
-			}
-		}
-		return nil
+		return o.closePanel(m, o.current())
 	}
 	if p := o.current(); p != nil {
 		return p.update(m, t, km)
@@ -123,7 +121,23 @@ func (o *output) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// closePanel closes p unless it holds unsaved edits.
+func (o *output) closePanel(m *Model, p panel) tea.Cmd {
+	if p == nil {
+		return nil
+	}
+	if r, ok := p.(*resultPanel); ok && r.dirty() {
+		return m.toast("Panel has unsaved edits ("+m.keys.First("results.revert_all")+" to revert)", toastWarn)
+	}
+	o.remove(p)
+	if r, ok := p.(*resultPanel); ok {
+		r.closeStream()
+	}
+	return nil
+}
+
 func (o *output) view(w, h int, focused bool) string {
+	o.spans = o.spans[:0]
 	var tabs []string
 	used := 0
 	start := 0
@@ -156,6 +170,7 @@ func (o *output) view(w, h int, focused bool) string {
 			break
 		}
 		tabs = append(tabs, s)
+		o.spans = append(o.spans, hitSpan{used, used + lipgloss.Width(s), i})
 		used += lipgloss.Width(s) + 1
 	}
 	header := components.FitStyled(strings.Join(tabs, " "), w)
@@ -213,6 +228,9 @@ func (p *messagesPanel) title() string {
 func (p *messagesPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	switch km.String() {
 	case "y":
+		if s, ok := p.tv.Selected(); ok {
+			return m.copy(s, "selection")
+		}
 		var raw []string
 		for _, e := range p.entries {
 			raw = append(raw, e.at.Format("15:04:05")+" "+e.text)
@@ -229,6 +247,11 @@ func (p *messagesPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 }
 
 func (p *messagesPanel) scroll(n int) { p.follow = false; p.tv.Scroll(n) }
+
+func (p *messagesPanel) mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd {
+	p.follow = false
+	return m.mouseText(&p.tv, ev, ox, oy)
+}
 
 func (p *messagesPanel) view(w, h int, focused bool) string {
 	p.unseen = 0
