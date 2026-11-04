@@ -22,6 +22,9 @@ A DataGrip-style workflow without the weight: browse schemas, write SQL with
 completion, edit rows, and inspect plans — all from the terminal, locally or on a
 server you reached over SSH.
 
+- **Work with the mouse or without it**: click, drag, wheel and right-click on every
+  pane, tab, dialog and status bar item; resize panes and columns, freeze columns,
+  select cell ranges. Every action also has a key.
 - **Explore** databases, schemas, tables, views and routines; see columns, indexes,
   foreign keys, triggers, sizes and generated DDL.
 - **Query** in tabs with syntax highlighting, vim or standard keys, context-aware
@@ -85,7 +88,8 @@ Press `ctrl+n` to add a connection, `ctrl+t` to test it, `ctrl+s` to save, then
 | `ctrl+p` | Command palette |
 | `ctrl+enter` · `F5` | Run statement under cursor |
 | `ctrl+t` · `alt+1…9` | New tab · switch tab |
-| `tab` | Move between explorer, editor and results |
+| `tab` · `F2` | Move between explorer, editor and results |
+| `F10` · right-click | Context menu |
 | `ctrl+g` | Transaction menu |
 | `ctrl+q` | Quit |
 

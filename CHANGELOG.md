@@ -2,6 +2,53 @@
 
 All notable changes to squi. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+### Added
+- Full mouse support: click, double-click, drag, wheel and right-click on tabs, panes,
+  editor, result grid, explorer, output tabs, dialogs, forms, the connection manager
+  and the status bar.
+- Selection by dragging in the editor, text views and the result grid (cell ranges and
+  whole rows), copied with `y`, `ctrl+c` or the copy menu.
+- Resize panes by dragging their borders; sizes and the hidden explorer are remembered
+  in `layout.json`.
+- Tab bar with close buttons, a new-tab button, drag to reorder and scrolling when tabs
+  do not fit.
+- Result grid: drag or double-click a column edge to resize or fit it, click a header to
+  sort, and freeze leading columns (`z`).
+- Context menus on right-click or `F10`.
+- `ctrl+w m` and `:mouse` turn mouse capture on and off, leaving text selection to the
+  terminal.
+- `F2` moves focus, also out of the editor while typing.
+
+### Changed
+- `H` and `L` move within the grid in detail and admin panels, like everywhere else.
+  Sub-tabs switch with `<`, `>` or `1…9` as before.
+- `F5` is no longer listed for `results.rerun` and `explorer.refresh`: it always ran the
+  query, so it never did either. Use `r`.
+- The mouse wheel scrolls the grid and explorer view and keeps the cursor on screen. In
+  the editor it scrolls without moving the cursor.
+- `esc` in the explorer returns to the editor when there is no filter to clear.
+- `explorer_width` is the default until a size has been saved; drag or `ctrl+w <`/`>`
+  sets the size used from then on.
+- The explorer can now be resized to half the terminal's width.
+- Hints show your own key bindings, and detail, plan and text panels list their keys.
+- Dialogs show clickable buttons. Prompt help text moved below them.
+
+### Fixed
+- A mouse report split across reads could be typed into the editor as text, most often
+  over SSH.
+- Clicking while a pane was zoomed could switch to another pane.
+- `esc` on an edited connection form now asks before discarding it, and a failed save
+  focuses the field at fault.
+- The connection manager shows messages and connection progress. It also no longer hides
+  its last list row or cuts off its key hints on narrow terminals.
+- A failed DDL load can be retried with `r`.
+- The explorer no longer says "loading…" when a filter matches nothing, and keeps the
+  selection on screen while filtered.
+- The editor's placeholder also shows while it has focus.
+- Sort marks fit in narrow columns.
+
 ## 0.6.0 — 2026-10-31
 
 ### Added

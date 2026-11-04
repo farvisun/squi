@@ -9,7 +9,7 @@ squi                      # opens the connection manager
 squi --connect prod-api   # opens a saved connection directly
 squi --connect 'postgres://app@db.internal/api?sslmode=require&ssh=bastion'
 squi --connect ~/data/app.db   # a SQLite file
-squi --no-mouse           # keep native terminal text selection
+squi --no-mouse           # start with mouse capture off (ctrl+w m toggles it)
 ```
 
 A connection URL is used as given and not saved; see [Connection URLs](#connection-urls).
@@ -36,7 +36,7 @@ command palette.
 ## Layout
 
 ```
-┌ 1 prod-api ● │ 2 staging ──────────────────────────────── ctrl+t new ┐
+┌ 1 prod-api ● × │ 2 staging × │ + ───────────────────────────────────┐
 │ Explorer        │ Query · NORMAL                                     │
 │ ▾ app           │ SELECT * FROM orders WHERE status = 'paid'         │
 │   ▾ public      ├────────────────────────────────────────────────────┤
@@ -47,7 +47,41 @@ command palette.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Move focus with `tab` / `shift+tab` or `ctrl+w h/j/k/l`; `ctrl+w z` zooms a pane.
+Move focus with `tab` / `shift+tab`, `F2` (also leaves the editor while typing) or
+`ctrl+w h/j/k/l`; `ctrl+w z` zooms a pane. Pane sizes are remembered between runs.
+
+## Mouse
+
+Everything also works from the keyboard; the mouse is on unless you start with
+`--no-mouse`.
+
+| Where | Gesture |
+|---|---|
+| Tab bar | click to switch · drag to reorder · `×` or middle-click to close (asks if there is unsaved work) · `+` new tab · wheel or `‹` `›` to move along · right-click for a menu |
+| Pane borders | drag to resize · double-click to reset |
+| Editor | click to place the cursor · drag to select · double-click selects a word, triple-click a line · wheel scrolls without moving the cursor · right-click for cut, copy, paste, run and format · click a completion to accept it |
+| Result grid | click a cell · drag to select a range · click or drag row numbers to select rows · click a header to sort · double-click a cell to inspect it · drag a header's `│` to resize, double-click it to fit · right-click for copy, filter, inspect, edit and foreign keys |
+| Explorer | click the arrow to expand · double-click a table to open it · wheel scrolls · right-click for table actions |
+| Output tabs | click to switch · middle-click to close |
+| Text and DDL views | drag to select · `y` or right-click copies the selection, or everything if nothing is selected |
+| Status bar | click the connection, database, `TX`, timeout or `READ-ONLY` · click a message to open Messages · click `F1 help` |
+| Dialogs and forms | click buttons, fields, toggles and options · click outside a menu or list to close it |
+
+`alt`+wheel or your terminal's horizontal scroll moves sideways. `F10` opens the
+context menu of the focused pane, for terminals that keep right-click for themselves.
+
+Selections copy with `y` (or `ctrl+c` in the editor), through the same clipboard path
+as the keyboard, so they work over SSH with OSC 52. A selected range also appears in
+the copy menu (`c`) as CSV, JSON, INSERT and more. `esc` clears it.
+
+Some actions stay deliberate on purpose: double-clicking a cell inspects rather than
+edits; the typed confirmation for destructive statements cannot be clicked through;
+clicking `READ-ONLY` explains it and links to the connection's settings, but never
+enables writes.
+
+**Selecting text with the terminal:** hold `shift` while dragging in most terminals
+(`option` in iTerm2, `fn` in Terminal.app), or turn mouse capture off with `ctrl+w m` or
+`:mouse`. `--no-mouse` starts with it off.
 
 ## Essential keys
 
@@ -56,13 +90,13 @@ Move focus with `tab` / `shift+tab` or `ctrl+w h/j/k/l`; `ctrl+w z` zooms a pane
 | Anywhere | `F1` help · `ctrl+p` palette · `:` command line · `ctrl+o` connections · `ctrl+t` new tab · `alt+1…9` switch tab · `ctrl+g` transaction menu · `ctrl+c` cancel query · `ctrl+q` quit |
 | Editor | `ctrl+enter` / `F5` run statement / selection · `F6` run all · `F7`/`F8` explain / analyze · `F4` open in `$EDITOR` · `tab` complete · `ctrl+r` history · vim: `space r/a/e/h/s/f/E` |
 | Explorer | `enter` open data · `t` / double-click open in new tab · `d` details · `D` DDL · `s` insert SELECT · `u` use database · `x` export · `i` import CSV · `/` filter · `*` pin to favourites · `r` refresh |
-| Results | `enter` inspect cell · `v` record view · `y`/`Y`/`c` copy · `W` copy as `WHERE` · `/` filter (server-side on tables) · `f` filter loaded rows · `s` sort · `#` count rows · `>` follow foreign key · `<` referencing rows · `backspace` back · `*` bookmark view · `x` export · `F` load all · `e` edit · `o` add row · `dd` delete row · `u`/`U` revert · `ctrl+s` save · `[` `]` switch output tabs |
-| Admin (`:admin`) | `1…4` processes / variables / users / sizes · `c` cancel query · `K` kill session · `a` auto-refresh |
+| Results | `enter` inspect cell · `v` record view · `y`/`Y`/`c` copy · `z` freeze columns up to the cursor · `W` copy as `WHERE` · `/` filter (server-side on tables) · `f` filter loaded rows · `s` sort · `#` count rows · `>` follow foreign key · `<` referencing rows · `backspace` back · `*` bookmark view · `x` export · `F` load all · `e` edit · `o` add row · `dd` delete row · `u`/`U` revert · `ctrl+s` save · `[` `]` switch output tabs |
+| Admin (`:admin`) | `1…4` or `<` `>` processes / variables / users / sizes · `c` cancel query · `K` kill session · `a` auto-refresh |
 
 Useful commands: `:use [db] [schema]`, `:commit`, `:rollback`, `:tx` (manual
 transactions), `:timeout 2m` (this tab's statement timeout; `0` for none),
 `:format`, `:edit`, `:open <name|url>`, `:consoles` (DataGrip queries), `:export`, `:snippet <name>`, `:snippets`,
-`:keys`, `:set novim`, `:set fetch=5000`.
+`:keys`, `:mouse`, `:set novim`, `:set fetch=5000`.
 
 Every binding above can be changed; see [Key bindings](#key-bindings).
 
