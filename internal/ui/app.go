@@ -84,27 +84,28 @@ type Model struct {
 	explorerW   int
 	editorPct   int
 
-	modals     []modal
-	paramVals  map[string]string // last value typed per query parameter (this run)
-	cmdline    *textinput.Model
-	winPrefix  bool
-	toastText  string
-	toastLevel toastLevel
-	toastUntil time.Time
-	spinner    spinner.Model
-	jobs       int
-	mouseOn    bool
-	frame      frame
-	clicks     clickTracker
-	drag       *dragState
-	dragSeq    int
-	tabScroll  int
-	lastLayout config.Layout
-	width      int
-	height     int
-	startErr   string
-	autoConn   string
-	termWrite  func(string)
+	modals       []modal
+	paramVals    map[string]string // last value typed per query parameter (this run)
+	cmdline      *textinput.Model
+	winPrefix    bool
+	toastText    string
+	toastLevel   toastLevel
+	toastUntil   time.Time
+	spinner      spinner.Model
+	jobs         int
+	connectSince time.Time
+	mouseOn      bool
+	frame        frame
+	clicks       clickTracker
+	drag         *dragState
+	dragSeq      int
+	tabScroll    int
+	lastLayout   config.Layout
+	width        int
+	height       int
+	startErr     string
+	autoConn     string
+	termWrite    func(string)
 
 	// pending holds saved tabs whose connection is not open yet; they are
 	// recreated when it connects and kept in the session file until then.
@@ -296,6 +297,9 @@ func (m *Model) connect(cfg config.Connection) tea.Cmd {
 	}
 	if m.connecting[cfg.ID] {
 		return m.toast("Already connecting to "+cfg.Title(), toastInfo)
+	}
+	if len(m.connecting) == 0 {
+		m.connectSince = time.Now()
 	}
 	m.connecting[cfg.ID] = true
 	conn := m.connector
@@ -929,10 +933,12 @@ func (m *Model) layout() layout {
 	return l
 }
 
+func (m *Model) tooSmall() bool { return m.width < 50 || m.height < 14 }
+
 // View renders the UI.
 func (m *Model) View() string {
 	m.frame = frame{}
-	if m.width < 50 || m.height < 14 {
+	if m.tooSmall() {
 		return "Terminal too small for squi (need 50×14)."
 	}
 	var base string
@@ -1004,6 +1010,10 @@ func (m *Model) mainView() string {
 		return components.Box(title, t.editor.View(), w, h, m.focus == focusEditor, theme.Accent)
 	}
 	outputBox := func(w, h int) string {
+		t.out.msgs.runKey = m.keys.First("run")
+		if r, ok := t.out.current().(*resultPanel); ok {
+			r.keys = m.keys
+		}
 		return components.Box("", t.out.view(w-2, h-2, m.focus == focusOutput), w, h, m.focus == focusOutput, theme.Accent)
 	}
 	if m.zoom {
@@ -1050,37 +1060,54 @@ func (m *Model) statusBar(t *tab) string {
 	}
 	seg := lipgloss.NewStyle().Background(bg).Foreground(fg)
 	var left []string
+	var hits []statusHit
+	lx := 0
+	add := func(s string, run func() tea.Cmd) {
+		if len(left) > 0 {
+			lx++ // the space joining segments
+		}
+		w := lipgloss.Width(s)
+		if run != nil {
+			hits = append(hits, statusHit{hitSpan{x0: lx, x1: lx + w}, run})
+		}
+		lx += w
+		left = append(left, s)
+	}
+	openConns := func() tea.Cmd { m.openConnections(); return nil }
 	if badge := theme.ConnBadge(cfg); badge != "" && cfg.Env != config.EnvProd {
-		left = append(left, badge)
+		add(badge, openConns)
 	} else if cfg.Env == config.EnvProd {
 		// production stays red whatever the connection's colour
-		left = append(left, seg.Bold(true).Render(strings.TrimRight(" PRODUCTION "+cfg.Label, " ")+" "))
+		add(seg.Bold(true).Render(strings.TrimRight(" PRODUCTION "+cfg.Label, " ")+" "), openConns)
 	}
-	left = append(left, seg.Render(" "+cfg.Driver+" "+cfg.Title()))
+	add(seg.Render(" "+cfg.Driver+" "+cfg.Title()), openConns)
 	if t.db != "" {
-		left = append(left, seg.Render("· "+t.db))
+		add(seg.Render("· "+t.db), func() tea.Cmd { return m.databasePicker(t) })
 	}
 	if cfg.SSH.Enabled {
 		state := "ssh"
 		if t.ac.tunnel != nil {
 			state = "ssh " + strings.ToLower(t.ac.tunnel.State().String())
 		}
-		left = append(left, seg.Render("· "+state))
+		add(seg.Render("· "+state), nil)
 	}
 	if cfg.ReadOnly {
-		left = append(left, seg.Bold(true).Render("· READ-ONLY"))
+		add(seg.Bold(true).Render("· READ-ONLY"), func() tea.Cmd { return m.readOnlyMenu(t) })
 	}
 	if d := t.queryTimeout(); d > 0 {
-		left = append(left, seg.Render("· ⏱ "+fmtTimeout(d)))
+		add(seg.Render("· ⏱ "+fmtTimeout(d)), func() tea.Cmd { return m.timeoutPrompt(t) })
 	}
+	txMenu := func() tea.Cmd { return m.txMenu(t) }
 	switch {
 	case t.inTx:
-		left = append(left, lipgloss.NewStyle().Background(theme.Yellow).Foreground(lipgloss.Color("#000000")).Bold(true).
-			Render(fmt.Sprintf(" TX %s ", time.Since(t.txSince).Truncate(time.Second))))
+		add(lipgloss.NewStyle().Background(theme.Yellow).Foreground(lipgloss.Color("#000000")).Bold(true).
+			Render(fmt.Sprintf(" TX %s ", time.Since(t.txSince).Truncate(time.Second))), txMenu)
 	case t.manualTx:
-		left = append(left, seg.Render("· manual tx"))
+		add(seg.Render("· manual tx"), txMenu)
 	}
 	right := ""
+	var rightRun func() tea.Cmd
+	helpW := 0
 	switch {
 	case time.Now().Before(m.toastUntil) && (!t.busy || m.toastLevel != toastInfo):
 		st := seg
@@ -1091,16 +1118,20 @@ func (m *Model) statusBar(t *tab) string {
 			st = lipgloss.NewStyle().Background(theme.Red).Foreground(lipgloss.Color("#ffffff"))
 		}
 		right = st.Render(" " + m.toastText + " ")
+		rightRun = func() tea.Cmd { return m.showMessages(t) }
 	case t.busy:
 		right = seg.Render(fmt.Sprintf(" %s %s %s · %s cancel ", m.spinner.View(), t.busyWhat, fmtDuration(time.Since(t.busySince).Round(100*time.Millisecond)), m.keys.First("cancel")))
+		rightRun = func() tea.Cmd { return m.cancel(t) }
 	case m.jobs > 0:
 		right = seg.Render(fmt.Sprintf(" %s %d background job(s) ", m.spinner.View(), m.jobs))
 	default:
-		hint := t.lastRun
-		if r, ok := t.out.current().(*resultPanel); ok {
-			hint = r.status()
+		help := " " + m.keys.First("help") + " help "
+		// the result panel shows its own status in its footer
+		if _, ok := t.out.current().(*resultPanel); !ok && t.lastRun != "" {
+			help = " " + t.lastRun + " ·" + help
 		}
-		right = seg.Render(" " + hint + " · " + m.keys.First("help") + " help ")
+		right = seg.Render(help)
+		helpW = lipgloss.Width(m.keys.First("help") + " help ")
 	}
 	l := strings.Join(left, seg.Render(" "))
 	gap := m.width - lipgloss.Width(l) - lipgloss.Width(right)
@@ -1108,5 +1139,48 @@ func (m *Model) statusBar(t *tab) string {
 		right = components.FitStyled(right, max(0, m.width-lipgloss.Width(l)-1))
 		gap = max(1, m.width-lipgloss.Width(l)-lipgloss.Width(right))
 	}
+	rx := lipgloss.Width(l) + gap
+	switch {
+	case rightRun != nil:
+		hits = append(hits, statusHit{hitSpan{x0: rx, x1: rx + lipgloss.Width(right)}, rightRun})
+	case helpW > 0:
+		hits = append(hits, statusHit{hitSpan{x0: rx + lipgloss.Width(right) - helpW, x1: rx + lipgloss.Width(right)}, m.showHelp})
+	}
+	m.frame.status = hits
 	return components.FitStyled(l+seg.Render(strings.Repeat(" ", gap))+right, m.width)
+}
+
+// showMessages opens the Messages panel of a tab.
+func (m *Model) showMessages(t *tab) tea.Cmd {
+	for i, p := range t.out.panels {
+		if p == panel(t.out.msgs) {
+			t.out.ix = i
+		}
+	}
+	m.focus = focusOutput
+	return nil
+}
+
+// readOnlyMenu explains the read-only state. Writes can only be enabled in
+// the connection's settings: one stray click must never allow them.
+func (m *Model) readOnlyMenu(t *tab) tea.Cmd {
+	cfg := t.ac.cfg
+	items := []menuItem{{"esc", "Close", func() tea.Cmd { return nil }}}
+	if !cfg.Transient {
+		items = append([]menuItem{{"e", "Edit connection", func() tea.Cmd {
+			m.openConnections()
+			m.mgr.edit(m, cfg)
+			return nil
+		}}}, items...)
+	}
+	m.push(&menuModal{title: "Read-only: writes are blocked", items: items})
+	return nil
+}
+
+// timeoutPrompt asks for the tab's statement timeout.
+func (m *Model) timeoutPrompt(t *tab) tea.Cmd {
+	pm := newPrompt("Statement timeout", "For this tab: 30s, 2m, 0 for none, or default", fmtTimeout(t.queryTimeout()), false,
+		func(v string) tea.Cmd { return m.setTimeout(t, strings.TrimSpace(v)) })
+	m.push(pm)
+	return nil
 }

@@ -204,6 +204,7 @@ type messagesPanel struct {
 	follow  bool
 	dirty   bool
 	unseen  int // errors logged since the panel was last shown
+	runKey  string
 }
 
 func (p *messagesPanel) log(level logLevel, text string) {
@@ -286,7 +287,7 @@ func (p *messagesPanel) view(w, h int, focused bool) string {
 		p.tv.Scroll(1 << 20)
 	}
 	if len(p.entries) == 0 {
-		return theme.Dim.Render(" No messages yet. Run a query with ctrl+enter or F5 (or space r).")
+		return theme.Dim.Render(" No messages yet. Run a query with ctrl+enter or " + p.runKey + " (or space r).")
 	}
 	return p.tv.View()
 }

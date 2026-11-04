@@ -75,6 +75,26 @@ func (p *Picker) refilter() {
 // SetIndex highlights the i-th visible item.
 func (p *Picker) SetIndex(i int) { p.ix = clampInt(i, 0, len(p.visible)-1) }
 
+// ItemAt returns the visible index of the item on content row y, or -1.
+func (p *Picker) ItemAt(y int) int {
+	per := 1
+	if p.MultiLine {
+		per = 2
+	}
+	y -= 2 // the input and the rule above the items
+	if y < 0 {
+		return -1
+	}
+	i := p.top + y/per
+	if i >= len(p.visible) || i >= p.top+p.rowsPerPage() {
+		return -1
+	}
+	return i
+}
+
+// ScrollBy moves the highlight by n items.
+func (p *Picker) ScrollBy(n int) { p.ix = clampInt(p.ix+n, 0, len(p.visible)-1) }
+
 // Selected returns the highlighted item.
 func (p *Picker) Selected() (PickerItem, bool) {
 	if len(p.visible) == 0 {

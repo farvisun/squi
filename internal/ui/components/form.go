@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/farvisun/squi/internal/ui/theme"
 )
@@ -46,6 +47,7 @@ type Form struct {
 	width  int
 	height int
 	LabelW int
+	rows   []int // field index of each rendered line (-1 for headings and gaps)
 }
 
 // NewForm creates an empty form.
@@ -255,9 +257,62 @@ func (f *Form) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+// Click focuses the field on a rendered row and acts on it: a toggle flips, a
+// select takes the option under the pointer, an input places its cursor.
+func (f *Form) Click(x, y int) {
+	y += f.top
+	if y < 0 || y >= len(f.rows) || f.rows[y] < 0 {
+		return
+	}
+	f.ix = f.rows[y]
+	f.syncFocus()
+	fl := f.fields[f.ix]
+	vx := x - (2 + f.LabelW + 1) // the marker, the label and a space
+	switch fl.Kind {
+	case FieldBool:
+		fl.on = !fl.on
+	case FieldSelect:
+		col := 0
+		for j, o := range fl.Options {
+			if o == "" {
+				o = "none"
+			}
+			w := runewidth.StringWidth(o) + 2
+			if vx >= col && vx < col+w {
+				fl.sel = j
+				return
+			}
+			col += w
+		}
+	default:
+		if vx >= 0 && runewidth.StringWidth(fl.input.Value()) <= fl.input.Width {
+			col := 0
+			for i, r := range []rune(fl.input.Value()) {
+				w := runewidth.RuneWidth(r)
+				if vx < col+w {
+					fl.input.SetCursor(i)
+					return
+				}
+				col += w
+			}
+			fl.input.CursorEnd()
+		}
+	}
+}
+
+// Wheel moves the focus by one field in the direction of n.
+func (f *Form) Wheel(n int) {
+	if n < 0 {
+		f.move(-1)
+	} else if n > 0 {
+		f.move(1)
+	}
+}
+
 // View renders the form.
 func (f *Form) View() string {
 	var lines []string
+	f.rows = f.rows[:0]
 	cursorLine := 0
 	for i, fl := range f.fields {
 		if !fl.visible() {
@@ -266,8 +321,10 @@ func (f *Form) View() string {
 		if fl.Kind == FieldSection {
 			if len(lines) > 0 {
 				lines = append(lines, "")
+				f.rows = append(f.rows, -1)
 			}
 			lines = append(lines, theme.Title.Render(fl.Label))
+			f.rows = append(f.rows, -1)
 			continue
 		}
 		focused := i == f.ix
@@ -310,6 +367,7 @@ func (f *Form) View() string {
 			line += "  " + theme.Dim.Render(fl.Hint)
 		}
 		lines = append(lines, line)
+		f.rows = append(f.rows, i)
 	}
 	if cursorLine < f.top {
 		f.top = cursorLine

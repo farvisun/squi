@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -149,10 +150,10 @@ func TestDragExplorerSplit(t *testing.T) {
 	x := m.frame.editor.x
 	dragTo(m, x, 10, 50, 10)
 	_ = m.View()
-	if m.frame.editor.x != 51 {
-		t.Fatalf("editor starts at %d, want 51", m.frame.editor.x)
+	if m.frame.editor.x != 50 {
+		t.Fatalf("editor starts at %d, want 50", m.frame.editor.x)
 	}
-	dragTo(m, 51, 10, 2, 10)
+	dragTo(m, 50, 10, 2, 10)
 	if m.explorerW != minExplorerW {
 		t.Fatalf("explorerW = %d, want minimum", m.explorerW)
 	}
@@ -166,10 +167,11 @@ func TestDragEditorSplit(t *testing.T) {
 	m, _, _ := newTestModel(t, devConn())
 	_ = m.View()
 	x := m.frame.output.x + 10
-	dragTo(m, x, m.frame.output.y, x, 20)
+	h := m.frame.editor.h
+	dragTo(m, x, m.frame.output.y, x, m.frame.output.y+6)
 	_ = m.View()
-	if m.frame.editor.h != 20 {
-		t.Fatalf("editor height %d, want 20", m.frame.editor.h)
+	if m.frame.editor.h != h+6 {
+		t.Fatalf("editor height %d, want %d", m.frame.editor.h, h+6)
 	}
 	dragTo(m, x, m.frame.output.y, x, 0)
 	if m.editorPct != minEditorPct {
@@ -203,7 +205,7 @@ func TestLostReleaseEndsDrag(t *testing.T) {
 func TestLayoutPersists(t *testing.T) {
 	m, _, _ := newTestModel(t, devConn())
 	_ = m.View()
-	dragTo(m, m.frame.editor.x, 10, 45, 10)
+	dragTo(m, m.frame.editor.x, 10, 46, 10)
 	key(m, "ctrl+w", "-")
 	key(m, "ctrl+b")
 	m2, err := New(Options{Store: m.store, Bridge: &Bridge{}})
@@ -744,5 +746,382 @@ func TestContextMenuKey(t *testing.T) {
 	drain(m, m.handleKey(tea.KeyMsg{Type: tea.KeyF2}))
 	if m.focus == focusOutput {
 		t.Fatal("f2 should move focus")
+	}
+}
+
+func TestConfirmButtons(t *testing.T) {
+	m, _, _ := newTestModel(t, devConn())
+	yes := false
+	m.push(&confirmModal{title: "Sure", body: "Really?", onYes: func() tea.Cmd { yes = true; return nil }})
+	x, y := locate(t, m, "n no")
+	click(m, x, y)
+	if yes || len(m.modals) != 0 {
+		t.Fatalf("no button: yes=%v modals=%d", yes, len(m.modals))
+	}
+	m.push(&confirmModal{title: "Sure", body: "Really?", onYes: func() tea.Cmd { yes = true; return nil }})
+	x, y = locate(t, m, "y yes")
+	click(m, x, y)
+	if !yes {
+		t.Fatal("yes button did not confirm")
+	}
+}
+
+func TestTypedConfirmCannotBeClickedThrough(t *testing.T) {
+	m, _, _ := newTestModel(t, devConn())
+	ran := false
+	tc := newTypedConfirm("Drop", "Drops everything", "DROP", func() tea.Cmd { ran = true; return nil })
+	m.push(tc)
+	x, y := locate(t, m, "enter confirm")
+	click(m, x, y)
+	if ran || len(m.modals) != 1 {
+		t.Fatal("confirm must need the typed text")
+	}
+	click(m, 0, 0)
+	if len(m.modals) != 1 {
+		t.Fatal("outside click must not close it")
+	}
+	tc.input.SetValue("DROP")
+	click(m, x, y)
+	if !ran {
+		t.Fatal("confirm should run once the text matches")
+	}
+	tc2 := newTypedConfirm("Drop", "Drops everything", "DROP", func() tea.Cmd { ran = false; return nil })
+	m.push(tc2)
+	x, y = locate(t, m, "esc cancel")
+	click(m, x, y)
+	if len(m.modals) != 0 || !ran {
+		t.Fatal("cancel should close without running")
+	}
+}
+
+func TestPromptClickPlacesCursorAndSubmits(t *testing.T) {
+	m, _, _ := newTestModel(t, devConn())
+	got := ""
+	p := newPrompt("Name", "A label", "abcdef", false, func(v string) tea.Cmd { got = v; return nil })
+	m.push(p)
+	x, y := locate(t, m, "abcdef")
+	click(m, x+2, y)
+	if p.input.Position() != 2 {
+		t.Fatalf("cursor at %d", p.input.Position())
+	}
+	x, y = locate(t, m, "enter ok")
+	click(m, x, y)
+	if got != "abcdef" || len(m.modals) != 0 {
+		t.Fatalf("got %q, %d modals", got, len(m.modals))
+	}
+}
+
+func TestPickerClickRuns(t *testing.T) {
+	m, _, _ := newTestModel(t, devConn())
+	got := ""
+	m.push(newPickerModal("Pick", []components.PickerItem{{Title: "alpha", Value: "a"}, {Title: "beta", Value: "b"}},
+		func(it components.PickerItem) tea.Cmd { got = it.Value.(string); return nil }))
+	x, y := locate(t, m, "beta")
+	click(m, x, y)
+	if got != "b" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestPickerMultiLineClick(t *testing.T) {
+	m, _, _ := newTestModel(t, devConn())
+	got := ""
+	pm := newPickerModal("Pick", []components.PickerItem{{Title: "alpha", Detail: "first", Value: "a"}, {Title: "beta", Detail: "second", Value: "b"}},
+		func(it components.PickerItem) tea.Cmd { got = it.Value.(string); return nil })
+	pm.picker.MultiLine = true
+	m.push(pm)
+	x, y := locate(t, m, "second")
+	click(m, x, y)
+	if got != "b" {
+		t.Fatalf("detail row: got %q", got)
+	}
+}
+
+func TestPickerModalRanksAboveTextModalOnOutsideClick(t *testing.T) {
+	m, _, _ := newTestModel(t, devConn())
+	tm := newTextModal("T", "text", "")
+	tm.onKey = func(string) (bool, tea.Cmd) { return false, nil }
+	m.push(tm)
+	_ = m.View()
+	click(m, 0, 0)
+	if len(m.modals) != 1 {
+		t.Fatal("a text view that decides something must not close on an outside click")
+	}
+}
+
+func managerSetup(t *testing.T) (*Model, *connManager) {
+	t.Helper()
+	m, _, _ := newTestModel(t, devConn())
+	m.conns = []config.Connection{{ID: "a", Name: "alpha", Driver: "sqlite", Database: "a.db"}, {ID: "b", Name: "beta", Driver: "sqlite", Database: "b.db"}}
+	m.openConnections()
+	_ = m.View()
+	return m, m.mgr
+}
+
+func TestManagerClickAndMenu(t *testing.T) {
+	m, c := managerSetup(t)
+	x, y := locate(t, m, "beta")
+	click(m, x, y)
+	if cfg, ok := c.selected(m); !ok || cfg.ID != "b" {
+		t.Fatalf("selected %+v", cfg)
+	}
+	press(m, x, y, tea.MouseButtonRight)
+	if len(m.modals) != 1 {
+		t.Fatal("no context menu")
+	}
+	ex, ey := locate(t, m, "Edit")
+	click(m, ex, ey)
+	if c.editing == nil || c.editing.ID != "b" {
+		t.Fatal("Edit should open the form")
+	}
+}
+
+func TestManagerFooterClick(t *testing.T) {
+	m, c := managerSetup(t)
+	x, y := locate(t, m, "ctrl+n new")
+	click(m, x, y)
+	if c.editing == nil {
+		t.Fatal("clicking the hint should open the new connection form")
+	}
+}
+
+func TestManagerFooterWrapsOnNarrowTerminal(t *testing.T) {
+	m, _ := managerSetup(t)
+	m.width = 60
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "esc back") {
+		t.Fatalf("esc back was cut off:\n%s", v)
+	}
+	if n := len(strings.Split(v, "\n")); n != m.height {
+		t.Fatalf("%d lines, want %d", n, m.height)
+	}
+}
+
+func TestManagerShowsToastAndConnecting(t *testing.T) {
+	m, _ := managerSetup(t)
+	drain(m, m.toast("Saved it", toastInfo))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "Saved it") {
+		t.Fatalf("no toast on the manager:\n%s", v)
+	}
+	m.connecting["a"] = true
+	m.connectSince = time.Now()
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "Connecting to alpha") {
+		t.Fatalf("no progress:\n%s", v)
+	}
+}
+
+func TestFormClickToggleSelectAndText(t *testing.T) {
+	m, c := managerSetup(t)
+	c.edit(m, config.Connection{Driver: "postgres", Host: "dbhost", Port: 5432})
+	x, y := locate(t, m, "mysql")
+	click(m, x, y)
+	if c.form.Value("driver") != "mysql" {
+		t.Fatalf("driver = %q", c.form.Value("driver"))
+	}
+	if c.form.Int("port") != 3306 {
+		t.Fatalf("port should follow the driver: %d", c.form.Int("port"))
+	}
+	x, y = locate(t, m, "dbhost")
+	click(m, x, y)
+	if c.form.FocusedKey() != "host" {
+		t.Fatalf("focused %q", c.form.FocusedKey())
+	}
+	x, y = locate(t, m, "Read-only")
+	click(m, x, y)
+	if !c.form.BoolValue("read_only") {
+		t.Fatal("click should flip the toggle")
+	}
+}
+
+func TestFormEscAsksBeforeDiscarding(t *testing.T) {
+	m, c := managerSetup(t)
+	c.edit(m, config.Connection{Driver: "postgres", Host: "dbhost", Port: 5432})
+	_ = m.View()
+	key(m, "esc")
+	if c.editing != nil || len(m.modals) != 0 {
+		t.Fatal("an unchanged form should just close")
+	}
+	c.edit(m, config.Connection{Driver: "postgres", Host: "dbhost", Port: 5432})
+	_ = m.View()
+	key(m, "x")
+	key(m, "esc")
+	if c.editing == nil || len(m.modals) != 1 {
+		t.Fatal("edits should be confirmed before they are thrown away")
+	}
+	key(m, "n")
+	if c.editing == nil {
+		t.Fatal("no should keep the form")
+	}
+	key(m, "esc", "y")
+	if c.editing != nil {
+		t.Fatal("yes should close the form")
+	}
+}
+
+func TestSaveFocusesBadField(t *testing.T) {
+	m, c := managerSetup(t)
+	c.edit(m, config.Connection{Driver: "postgres", Port: 5432})
+	c.form.FocusKey("name")
+	drain(m, c.save(m))
+	if c.form.FocusedKey() != "host" {
+		t.Fatalf("focused %q", c.form.FocusedKey())
+	}
+}
+
+func TestStatusBarClicks(t *testing.T) {
+	m, tb, _ := newTestModel(t, config.Connection{ID: "c", Name: "dev", Driver: "postgres", ReadOnly: true})
+	tb.db = "shop"
+	tb.manualTx = true
+	x, y := locate(t, m, "manual tx")
+	click(m, x, y)
+	if _, ok := m.modals[0].(*menuModal); !ok {
+		t.Fatalf("modal %T", m.modals[0])
+	}
+	key(m, "esc")
+	x, y = locate(t, m, "READ-ONLY")
+	click(m, x, y)
+	if len(m.modals) != 1 {
+		t.Fatal("no menu")
+	}
+	if !tb.ac.cfg.ReadOnly {
+		t.Fatal("a click must not enable writes")
+	}
+	key(m, "esc")
+	x, y = locate(t, m, "help")
+	click(m, x, y)
+	if _, ok := m.modals[0].(*textModal); !ok {
+		t.Fatalf("modal %T", m.modals[0])
+	}
+}
+
+func TestStatusBarErrorOpensMessages(t *testing.T) {
+	m, tb, _ := newTestModel(t, devConn())
+	tb.out.add(&textPanel{name: "DDL", tv: components.NewTextView("x", "")})
+	drain(m, m.toast("something failed", toastError))
+	x, y := locate(t, m, "something failed")
+	click(m, x, y)
+	if _, ok := tb.out.current().(*messagesPanel); !ok || m.focus != focusOutput {
+		t.Fatalf("panel %T focus %v", tb.out.current(), m.focus)
+	}
+}
+
+func TestDeleteRowHintAppears(t *testing.T) {
+	m, _, r := resultsSetup(t)
+	key(m, "d")
+	if !r.pendingD || !strings.Contains(m.toastText, "again") {
+		t.Fatalf("toast %q", m.toastText)
+	}
+}
+
+func TestDetailRetriesFailedDDL(t *testing.T) {
+	m, tb, _ := newTestModel(t, devConn())
+	p := newDetailPanel(tb.ac, &db.TableDetail{}, 40)
+	tb.out.add(p)
+	p.ix = len(p.names) - 1
+	p.ddlErr = "boom"
+	m.focus = focusOutput
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "r retries") {
+		t.Fatalf("no retry hint:\n%s", v)
+	}
+	key(m, "r")
+	if p.ddlErr != "" {
+		t.Fatal("r should clear the error and reload")
+	}
+}
+
+func TestEditorPlaceholderWhenFocused(t *testing.T) {
+	m, tb, _ := newTestModel(t, devConn())
+	m.focus = focusEditor
+	tb.editor.SetValue("")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "write SQL here") {
+		t.Fatalf("no placeholder while focused:\n%s", v)
+	}
+}
+
+func TestHLReachGridInDetailPanel(t *testing.T) {
+	m, tb, _ := newTestModel(t, devConn())
+	p := newDetailPanel(tb.ac, &db.TableDetail{}, 40)
+	tb.out.add(p)
+	m.focus = focusOutput
+	_ = m.View()
+	ix := p.ix
+	key(m, "L")
+	if p.ix != ix {
+		t.Fatal("L should go to the grid, not switch sub-tabs")
+	}
+	key(m, ">")
+	if p.ix == ix {
+		t.Fatal("> should switch sub-tabs")
+	}
+}
+
+func TestEveryMenuFitsNarrowTerminals(t *testing.T) {
+	for _, sz := range [][2]int{{50, 14}, {80, 24}} {
+		m, _, _ := resultsSetup(t)
+		m.width, m.height = sz[0], sz[1]
+		drain(m, m.handleKey(tea.KeyMsg{Type: tea.KeyF10}))
+		lines := strings.Split(m.View(), "\n")
+		if len(lines) != sz[1] {
+			t.Fatalf("%dx%d: %d lines", sz[0], sz[1], len(lines))
+		}
+		for _, l := range lines {
+			if w := ansi.StringWidth(l); w > sz[0] {
+				t.Fatalf("%dx%d: line %d cells wide", sz[0], sz[1], w)
+			}
+		}
+	}
+}
+
+func TestPanelsRenderAtSmallSizes(t *testing.T) {
+	m, tb, _ := resultsSetup(t)
+	root := &db.PlanNode{Title: "Seq Scan", Children: []*db.PlanNode{{Title: "Index"}}}
+	panels := []panel{
+		newDetailPanel(tb.ac, &db.TableDetail{}, 40),
+		&textPanel{name: "DDL", tv: components.NewTextView("CREATE TABLE x (\n  id int\n)", "")},
+		newExplainPanel("SELECT 1", root, false),
+	}
+	for _, p := range panels {
+		tb.out.add(p)
+		for _, sz := range [][2]int{{50, 14}, {80, 24}} {
+			m.width, m.height = sz[0], sz[1]
+			if n := len(strings.Split(m.View(), "\n")); n != sz[1] {
+				t.Errorf("%T at %dx%d: %d lines", p, sz[0], sz[1], n)
+			}
+		}
+	}
+}
+
+func TestExplainClickToggles(t *testing.T) {
+	m, tb, _ := newTestModel(t, devConn())
+	root := &db.PlanNode{Title: "Seq Scan", Children: []*db.PlanNode{{Title: "Index Lookup"}}}
+	p := newExplainPanel("SELECT 1", root, false)
+	tb.out.add(p)
+	x, y := locate(t, m, "Seq Scan")
+	click(m, x-2, y) // the arrow
+	if _, ok := p.collapsed[root]; !ok || !p.collapsed[root] {
+		t.Fatal("clicking the arrow should collapse the node")
+	}
+	if strings.Contains(ansi.Strip(m.View()), "Index Lookup") {
+		t.Fatal("child still shown")
+	}
+}
+
+func TestCopyMenuOffersSelection(t *testing.T) {
+	m, _, _ := resultsSetup(t)
+	x, y := locate(t, m, "a@b.c")
+	dragTo(m, x, y, x, y+2)
+	key(m, "c")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "Selection as CSV") {
+		t.Fatalf("no selection in the copy menu:\n%s", v)
+	}
+}
+
+func TestMouseIgnoredWhenTooSmall(t *testing.T) {
+	m, _ := managerSetup(t)
+	m.width, m.height = 40, 10
+	_ = m.View()
+	click(m, 5, 5)
+	if m.mgr.editing != nil || len(m.modals) != 0 {
+		t.Fatal("nothing is on screen to click")
 	}
 }

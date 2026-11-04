@@ -322,6 +322,11 @@ func (m *Model) copyMenu(r *resultPanel) tea.Cmd {
 			all = append(all, r.effectiveRow(i))
 		}
 	}
+	if cols, rows, ok := r.rangeCells(); ok {
+		for _, f := range dataio.Formats {
+			add(fmt.Sprintf("Selection as %s", strings.ToUpper(string(f))), choice{"selection", rows, f, cols})
+		}
+	}
 	if row >= 0 {
 		one := [][]db.Cell{r.effectiveRow(row)}
 		add("Row as TSV", choice{"row", one, dataio.FormatTSV, r.cols})
@@ -602,7 +607,7 @@ func (m *Model) saveEdits(t *tab, r *resultPanel) tea.Cmd {
 	}
 	preview := strings.Join(stmts, ";\n") + ";"
 	tm := newTextModal(fmt.Sprintf("Apply %d change(s) to %s", len(stmts), envLabel(t.ac.cfg)), preview, components.LexerFor(t.ac.cfg.Driver))
-	tm.footer = theme.Key.Render("enter") + " apply   " + theme.Key.Render("y") + " copy   " + theme.Key.Render("esc") + " cancel"
+	tm.hints = []hint{{key: "enter", label: "apply"}, {key: "y", label: "copy"}, {key: "esc", label: "cancel"}}
 	tm.onKey = func(key string) (bool, tea.Cmd) {
 		if key != "enter" {
 			return false, nil

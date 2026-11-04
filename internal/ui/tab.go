@@ -108,7 +108,7 @@ func (m *Model) op(t *tab, what string, fn func(ctx context.Context, s db.Sessio
 // opKeep is op, but leaves keep open (used to fetch more rows from it).
 func (m *Model) opKeep(t *tab, keep *openStream, what string, fn func(ctx context.Context, s db.Session) tea.Msg) tea.Cmd {
 	if t.busy {
-		return m.toast("Tab is busy ("+t.busyWhat+") — ctrl+c cancels", toastWarn)
+		return m.toast("Tab is busy ("+t.busyWhat+") — "+m.keys.First("cancel")+" cancels", toastWarn)
 	}
 	for _, r := range t.out.results() {
 		if r.stream != nil && r.stream != keep {

@@ -49,6 +49,8 @@ type resultPanel struct {
 	added    map[int]bool
 	deleted  map[int]bool
 	pendingD bool
+
+	keys *keymap.Map // for hints; set when drawn
 }
 
 func newResultPanel(name, sql string, cols []db.ResultColumn, rows [][]db.Cell, maxColW int) *resultPanel {
@@ -219,9 +221,20 @@ func (r *resultPanel) view(w, h int, focused bool) string {
 		footer += "  " + b
 	}
 	if r.dirty() {
-		footer += "  " + theme.Warn.Render(fmt.Sprintf("%d pending change(s) — ctrl+s save · u revert row", r.changeCount()))
+		footer += "  " + theme.Warn.Render(fmt.Sprintf("%d pending change(s) — %s save · %s revert row", r.changeCount(),
+			r.keyOf("results.save", "ctrl+s"), r.keyOf("results.revert_row", "u")))
 	}
 	return r.grid.View() + "\n" + components.FitStyled(footer, w)
+}
+
+// keyOf returns the key bound to action, for hints.
+func (r *resultPanel) keyOf(action, fallback string) string {
+	if r.keys != nil {
+		if k := r.keys.First(action); k != "" {
+			return k
+		}
+	}
+	return fallback
 }
 
 func (r *resultPanel) changeCount() int {
@@ -337,6 +350,7 @@ func (r *resultPanel) act(m *Model, t *tab, action string) tea.Cmd {
 		return r.addRow(m, t)
 	case "results.delete_row":
 		r.pendingD = true
+		return m.toast("Press "+m.keys.First("results.delete_row")+" again to delete this row", toastInfo)
 	case "results.revert_row":
 		if row >= 0 {
 			r.revertRow(row)
@@ -538,7 +552,7 @@ func (r *resultPanel) addRow(m *Model, t *tab) tea.Cmd {
 		ix := len(r.rows()) - 1
 		r.added[ix] = true
 		r.grid.SetCursorRow(ix)
-		return m.toast("New row added — press e to set values, ctrl+s to save", toastInfo)
+		return m.toast("New row added — press "+m.keys.First("results.edit")+" to set values, "+m.keys.First("results.save")+" to save", toastInfo)
 	})
 }
 

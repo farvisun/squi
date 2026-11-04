@@ -33,8 +33,9 @@ func (m *Model) mouseSplit(ev mouseEvent) bool {
 			m.saveLayout()
 			return true
 		}
+		w0 := f.explorer.w
 		m.startDrag(&dragState{move: func(x, _ int) tea.Cmd {
-			m.setExplorerW(x + 1)
+			m.setExplorerW(w0 + x - ev.x)
 			return nil
 		}, end: m.saveLayout})
 		return true
@@ -46,11 +47,10 @@ func (m *Model) mouseSplit(ev mouseEvent) bool {
 			return true
 		}
 		bodyH := max(1, m.height-2)
+		h0 := f.editor.h
 		m.startDrag(&dragState{move: func(_, y int) tea.Cmd {
-			// y is the row the editor's bottom border should occupy; the body
-			// starts at row 1, so the editor is then y rows tall. Round up, as
-			// layout() rounds down.
-			m.setEditorPct((y*100 + bodyH - 1) / bodyH)
+			// round up, as layout() rounds down
+			m.setEditorPct(((h0+y-ev.y)*100 + bodyH - 1) / bodyH)
 			return nil
 		}, end: m.saveLayout})
 		return true

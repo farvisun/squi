@@ -54,7 +54,7 @@ func browseFrameFor(d db.Dialect, b db.Browse) browseFrame {
 // showFrame runs f in place of r. back becomes the panel's history.
 func (m *Model) showFrame(t *tab, r *resultPanel, f browseFrame, back []browseFrame, restoreCursor bool) tea.Cmd {
 	if r.dirty() {
-		return m.toast("Save (ctrl+s) or revert (U) pending edits first", toastWarn)
+		return m.toast("Save ("+m.keys.First("results.save")+") or revert ("+m.keys.First("results.revert_all")+") pending edits first", toastWarn)
 	}
 	opts := runOpts{replace: r, name: f.name, source: f.source,
 		nav: &navState{browse: f.browse, back: back, row: f.row, col: f.col, restore: restoreCursor}}

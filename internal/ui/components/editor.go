@@ -1376,8 +1376,16 @@ func (e *Editor) View() string {
 			sb.WriteString(gutter.Render(num))
 		}
 		line := e.lines[r]
-		if empty && e.Placeholder != "" && !e.focused {
-			sb.WriteString(theme.Dim.Render(Fit(e.Placeholder, tw)))
+		if empty && e.Placeholder != "" {
+			if e.focused { // keep the cursor on screen, the hint after it
+				cur := theme.Cursor
+				if e.Inserting() {
+					cur = lipgloss.NewStyle().Underline(true).Reverse(true)
+				}
+				sb.WriteString(cur.Render(" ") + theme.Dim.Render(Fit(e.Placeholder, max(0, tw-1))))
+			} else {
+				sb.WriteString(theme.Dim.Render(Fit(e.Placeholder, tw)))
+			}
 			out = append(out, sb.String())
 			continue
 		}

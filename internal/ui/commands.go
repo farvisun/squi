@@ -341,6 +341,7 @@ var helpSections = []struct {
 	{"Results", [][2]string{
 		{"hjkl · gg G · ctrl+d/u", "navigate (more rows load as you scroll; @results.load_all loads all)"},
 		{"@output.prev / @output.next", "previous / next output tab · @output.close closes it"},
+		{"@results.freeze", "freeze columns up to the cursor column, or unfreeze"},
 		{"@results.inspect / @results.record", "inspect cell / view row as record"},
 		{"@results.copy_cell / @results.copy_row / @results.copy_menu", "copy cell / row / copy menu (CSV, JSON, INSERT, Markdown…)"},
 		{"@results.copy_where", "copy a WHERE predicate (cell, row key or the column's loaded values)"},
@@ -356,8 +357,19 @@ var helpSections = []struct {
 	}},
 	{"Detail / Admin / Plan", [][2]string{
 		{"1…9 · < >", "switch sub-tab"}, {"o", "open table data (detail)"},
+		{"y · e", "copy · send DDL or text to the editor"}, {"C", "clear messages (Messages)"},
 		{"c / K", "cancel query / kill session (processes)"}, {"a", "toggle auto-refresh"},
 		{"enter", "expand plan node · user grants"}, {"r", "raw plan / refresh"},
+	}},
+	{"Mouse", [][2]string{
+		{"click · double-click", "focus and place the cursor · select a word (triple: line), open a table, inspect a cell"},
+		{"drag", "select text or a range of cells · move a pane border or column edge · reorder tabs"},
+		{"double-click a border", "reset a pane's size · fit a column to its values"},
+		{"right-click · @context_menu", "context menu of what's under the pointer · of the focused pane"},
+		{"middle-click", "close a tab or output tab"},
+		{"wheel · alt+wheel", "scroll · scroll sideways (also the terminal's horizontal scroll)"},
+		{"status bar", "click the connection, database, TX, timeout, READ-ONLY or a message"},
+		{"shift+drag · @window m", "let the terminal select text · turn mouse capture off and on"},
 	}},
 	{"Custom keys", [][2]string{
 		{"settings.toml [keys]", `run = ["ctrl+r", "f5"] · "results.follow_fk" = ["g"] · analyze = [] — names as in :keys`},

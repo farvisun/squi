@@ -82,7 +82,7 @@ func (m *Model) execute(t *tab, stmts []sqltext.Statement, opts runOpts) tea.Cmd
 		return m.toast("Nothing to run", toastWarn)
 	}
 	if t.busy {
-		return m.toast("Tab is busy — ctrl+c cancels", toastWarn)
+		return m.toast("Tab is busy — "+m.keys.First("cancel")+" cancels", toastWarn)
 	}
 	cfg := t.ac.cfg
 	d := t.ac.driver()
@@ -139,7 +139,7 @@ func (m *Model) startRun(t *tab, stmts []sqltext.Statement, opts runOpts) tea.Cm
 	} else {
 		for _, r := range t.out.results() {
 			if r.dirty() {
-				return m.toast("Save (ctrl+s) or revert (U) pending edits first", toastWarn)
+				return m.toast("Save ("+m.keys.First("results.save")+") or revert ("+m.keys.First("results.revert_all")+") pending edits first", toastWarn)
 			}
 		}
 		for _, r := range t.out.results() {

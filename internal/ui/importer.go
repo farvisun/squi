@@ -16,6 +16,7 @@ var nullChoices = []string{"", "NULL", `\N`}
 
 // importModal maps CSV columns to table columns before an import.
 type importModal struct {
+	hits    []hintHit
 	ac      *activeConn
 	ref     db.ObjectRef
 	path    string
@@ -46,6 +47,27 @@ func newImportModal(m *Model, ac *activeConn, ref db.ObjectRef, d *db.TableDetai
 }
 
 func (im *importModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
+	if me, ok := msg.(tea.MouseMsg); ok {
+		if k := bodyClick(im.hits, me); k != "" {
+			return im.update(m, keyPress(k))
+		}
+		switch me.Button {
+		case tea.MouseButtonWheelUp:
+			im.ix = max(im.ix-1, 0)
+		case tea.MouseButtonWheelDown:
+			im.ix = min(im.ix+1, len(im.header)-1)
+		case tea.MouseButtonLeft:
+			// the path and a blank line sit above the rows; a click on the
+			// selected row moves it to the next target
+			if i := me.Y - 1 - 2; i >= 0 && i < len(im.header) {
+				if i == im.ix {
+					return im.update(m, keyPress("l"))
+				}
+				im.ix = i
+			}
+		}
+		return false, nil
+	}
 	km, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return false, nil
@@ -125,8 +147,10 @@ func (im *importModal) view(w, h int) string {
 	if im.warning != "" {
 		lines = append(lines, theme.Error.Render(im.warning))
 	}
-	lines = append(lines, "", theme.Key.Render("h/l")+" change target  "+theme.Key.Render("s")+" skip  "+
-		theme.Key.Render("n")+" NULL text  "+theme.Key.Render("enter")+" import  "+theme.Key.Render("esc")+" cancel")
+	footer, hits := renderHints([]hint{{key: "h/l", label: "change target", inert: true}, {key: "s", label: "skip"},
+		{key: "n", label: "NULL text"}, {key: "enter", label: "import"}, {key: "esc", label: "cancel"}}, bw-2, false)
+	im.hits = offsetHints(hits, lipgloss.Height(strings.Join(lines, "\n"))+1)
+	lines = append(lines, "", footer)
 	if len(lines) > h-4 {
 		lines = lines[:h-4]
 	}

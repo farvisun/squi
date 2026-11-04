@@ -192,6 +192,10 @@ func (p *detailPanel) update(m *Model, t *tab, km tea.KeyMsg) tea.Cmd {
 	}
 	if p.isDDL() {
 		if p.ddl == nil {
+			if k == "r" && p.ddlErr != "" {
+				p.ddlErr = ""
+				return p.loadDDL()
+			}
 			return nil
 		}
 		if k == "y" {
@@ -293,12 +297,12 @@ func (p *detailPanel) view(w, h int, focused bool) string {
 	if p.isDDL() {
 		switch {
 		case p.ddlErr != "":
-			return head + "\n" + theme.Error.Render(p.ddlErr)
+			return head + "\n" + theme.Error.Render(p.ddlErr) + "\n" + theme.Dim.Render("r retries")
 		case p.ddl == nil:
 			return head + "\n" + theme.Dim.Render("loading…")
 		}
-		p.ddl.SetSize(w, h-1)
-		return head + "\n" + p.ddl.View()
+		p.ddl.SetSize(w, h-2)
+		return head + "\n" + p.ddl.View() + "\n" + panelHint(w, "y", "copy", "e", "to editor", "< >", "sub-tabs")
 	}
 	g := p.grids[p.ix]
 	if focused {
@@ -306,8 +310,17 @@ func (p *detailPanel) view(w, h int, focused bool) string {
 	} else {
 		g.Blur()
 	}
-	g.SetSize(w, h-1)
-	return head + "\n" + g.View()
+	g.SetSize(w, h-2)
+	return head + "\n" + g.View() + "\n" + panelHint(w, "enter", "inspect", "y", "copy", "o", "open data", "< >", "sub-tabs")
+}
+
+// panelHint renders a one-line footer of key/label pairs.
+func panelHint(w int, pairs ...string) string {
+	var parts []string
+	for i := 0; i+1 < len(pairs); i += 2 {
+		parts = append(parts, theme.Key.Render(pairs[i])+" "+theme.Dim.Render(pairs[i+1]))
+	}
+	return components.FitStyled(strings.Join(parts, theme.Dim.Render(" · ")), w)
 }
 
 // ---- plain text (DDL) ----
@@ -337,8 +350,8 @@ func (p *textPanel) mouse(m *Model, t *tab, ev mouseEvent, ox, oy int) tea.Cmd {
 }
 
 func (p *textPanel) view(w, h int, focused bool) string {
-	p.tv.SetSize(w, h)
-	return p.tv.View()
+	p.tv.SetSize(w, h-1)
+	return p.tv.View() + "\n" + panelHint(w, "y", "copy", "e", "to editor")
 }
 
 // ---- explain ----
@@ -502,9 +515,10 @@ func selfTime(n *db.PlanNode) float64 {
 
 func (p *explainPanel) view(w, h int, focused bool) string {
 	if p.raw {
-		p.rawView.SetSize(w, h)
-		return p.rawView.View()
+		p.rawView.SetSize(w, h-1)
+		return p.rawView.View() + "\n" + panelHint(w, "r", "tree", "y", "copy")
 	}
+	h-- // the key hints
 	sel := p.flat[p.ix].n
 	detailH := min(len(sel.Details)+1, h/2)
 	treeH := h - detailH
@@ -545,7 +559,8 @@ func (p *explainPanel) view(w, h int, focused bool) string {
 	for _, kv := range sel.Details {
 		det = append(det, components.FitStyled(theme.Key.Render(kv.Key+": ")+components.Sanitize(kv.Value), w))
 	}
-	return out + "\n" + strings.Join(det[:min(len(det), detailH)], "\n")
+	return out + "\n" + strings.Join(det[:min(len(det), detailH)], "\n") + "\n" +
+		panelHint(w, "enter", "expand", "r", "raw plan", "y", "copy")
 }
 
 // ---- admin ----

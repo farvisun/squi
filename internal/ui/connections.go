@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +26,124 @@ type connManager struct {
 	editing *config.Connection // nil = list mode
 	testing bool
 	status  string
+	initial formSnapshot // the form as opened, to notice edits
+	listTop int          // screen row of the list box
+	listW   int
+	formTop int // screen row of the form's first line
+	hits    []hintHit
+}
+
+// formSnapshot is what the connection form holds.
+type formSnapshot struct {
+	cfg       config.Connection
+	pw, sshPw string
+}
+
+func (c *connManager) snapshot() formSnapshot {
+	cfg, pw, sshPw := c.formConn()
+	return formSnapshot{cfg, pw, sshPw}
+}
+
+func (c *connManager) formDirty() bool {
+	return !reflect.DeepEqual(c.snapshot(), c.initial)
+}
+
+// closeForm leaves the form, asking first if it holds edits.
+func (c *connManager) closeForm(m *Model) tea.Cmd {
+	if !c.formDirty() {
+		c.editing, c.form = nil, nil
+		return nil
+	}
+	m.push(&confirmModal{title: "Discard changes", body: "This connection has unsaved changes. Discard them?",
+		onYes: func() tea.Cmd {
+			c.editing, c.form = nil, nil
+			return nil
+		}})
+	return nil
+}
+
+// statusLine is what the manager shows above its keys: work in progress,
+// then the latest toast, then the result of the last action.
+func (c *connManager) statusLine(m *Model) string {
+	if len(m.connecting) > 0 {
+		var names []string
+		for id := range m.connecting {
+			name := id
+			if cfg, ok := m.connByID(id); ok {
+				name = cfg.Title()
+			}
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return m.spinner.View() + " Connecting to " + strings.Join(names, ", ") + "… " +
+			fmtDuration(time.Since(m.connectSince).Truncate(time.Second))
+	}
+	if time.Now().Before(m.toastUntil) {
+		switch m.toastLevel {
+		case toastError:
+			return theme.Error.Render(m.toastText)
+		case toastWarn:
+			return theme.Warn.Render(m.toastText)
+		}
+		return m.toastText
+	}
+	return c.status
+}
+
+// mouse handles a press or wheel step at screen coordinates.
+func (c *connManager) mouse(m *Model, ev mouseEvent) tea.Cmd {
+	if !ev.wheel && ev.btn == tea.MouseButtonLeft {
+		if k := hintAt(c.hits, ev.x, ev.y); k != "" {
+			return m.handleKey(keyPress(k))
+		}
+	}
+	if c.editing != nil {
+		switch ev.btn {
+		case tea.MouseButtonWheelUp:
+			c.form.Wheel(-1)
+		case tea.MouseButtonWheelDown:
+			c.form.Wheel(1)
+		case tea.MouseButtonLeft:
+			old := c.form.Value("driver")
+			c.form.Click(ev.x-1, ev.y-c.formTop)
+			c.driverChanged(old)
+		}
+		return nil
+	}
+	if ev.wheel {
+		if d := ev.delta(); d != 0 {
+			c.picker.ScrollBy(d)
+		}
+		return nil
+	}
+	if ev.x >= c.listW {
+		return nil
+	}
+	i := c.picker.ItemAt(ev.y - c.listTop - 1) // inside the top border
+	if i < 0 {
+		return nil
+	}
+	c.picker.SetIndex(i)
+	switch ev.btn {
+	case tea.MouseButtonLeft:
+		if ev.clicks == 2 {
+			if cfg, ok := c.selected(m); ok {
+				return m.connect(cfg)
+			}
+		}
+	case tea.MouseButtonRight:
+		press := func(k string) func() tea.Cmd {
+			return func() tea.Cmd { return c.update(m, keyPress(k)) }
+		}
+		m.pushMenu("Connection", []menuItem{
+			{"enter", "Connect", press("enter")},
+			{"e", "Edit", press("ctrl+e")},
+			{"y", "Duplicate", press("ctrl+y")},
+			{"t", "Test", press("ctrl+t")},
+			{"d", "Delete", press("ctrl+d")},
+		}, ev.x, ev.y)
+	}
+	return nil
 }
 
 func (m *Model) openConnections() {
@@ -150,6 +270,7 @@ func (c *connManager) update(m *Model, msg tea.Msg) tea.Cmd {
 }
 
 func (c *connManager) edit(m *Model, cfg config.Connection) {
+	defer func() { c.initial = c.snapshot() }()
 	c.editing = &cfg
 	c.status = ""
 	f := components.NewForm()
@@ -275,8 +396,7 @@ func (c *connManager) updateForm(m *Model, msg tea.Msg) tea.Cmd {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
 		case "esc":
-			c.editing, c.form = nil, nil
-			return nil
+			return c.closeForm(m)
 		case "ctrl+s":
 			return c.save(m)
 		case "ctrl+t":
@@ -291,12 +411,17 @@ func (c *connManager) updateForm(m *Model, msg tea.Msg) tea.Cmd {
 	}
 	oldDriver := c.form.Value("driver")
 	cmd := c.form.Update(msg)
+	c.driverChanged(oldDriver)
+	return cmd
+}
+
+// driverChanged moves the default port along with a new driver.
+func (c *connManager) driverChanged(oldDriver string) {
 	if nd := c.form.Value("driver"); nd != oldDriver {
 		if p := c.form.Int("port"); p == 0 || p == db.DefaultPort(db.DriverName(oldDriver)) {
 			c.form.SetValue("port", fmt.Sprint(db.DefaultPort(db.DriverName(nd))))
 		}
 	}
-	return cmd
 }
 
 // fillFromURL replaces the form's fields with those of a connection URL,
@@ -421,19 +546,23 @@ func (c *connManager) save(m *Model) tea.Cmd {
 	cfg, pw, sshPw := c.formConn()
 	if cfg.Driver == string(db.SQLite) && cfg.Database == "" {
 		c.status = theme.Error.Render("Database file is required")
+		c.form.FocusKey("file")
 		return nil
 	}
 	if cfg.Host == "" && !cfg.SSH.Enabled && cfg.Driver != string(db.SQLite) {
 		c.status = theme.Error.Render("Host is required")
+		c.form.FocusKey("host")
 		return nil
 	}
 	if _, ok := theme.ParseColor(cfg.Color); cfg.Color != "" && !ok {
 		c.status = theme.Error.Render("Unknown color " + cfg.Color + " — use a name like red or #rrggbb")
+		c.form.FocusKey("color")
 		return nil
 	}
 	if cfg.StatementTimeout != "" {
 		if _, err := config.ParseTimeout(cfg.StatementTimeout); err != nil {
 			c.status = theme.Error.Render("Statement " + err.Error())
+			c.form.FocusKey("timeout")
 			return nil
 		}
 	}
@@ -488,22 +617,40 @@ func (c *connManager) view(m *Model, w, h int) string {
 		if c.editing.ID != "" {
 			head = "Edit " + c.editing.Title()
 		}
-		c.form.SetSize(w-4, h-7)
+		footer, hits := renderHints([]hint{{key: "ctrl+s", label: "save"}, {key: "ctrl+t", label: "test"}, {key: "ctrl+l", label: "databases"},
+			{key: "ctrl+u", label: "from URL"}, {key: "↑↓/tab", label: "move", inert: true}, {key: "←→/space", label: "change", inert: true},
+			{key: "esc", label: "cancel"}}, w-2, false)
+		n := lipgloss.Height(footer)
+		c.form.SetSize(w-4, h-6-n)
 		body := c.form.View()
-		footer := theme.Key.Render("ctrl+s") + " save  " + theme.Key.Render("ctrl+t") + " test  " + theme.Key.Render("ctrl+l") + " databases  " +
-			theme.Key.Render("ctrl+u") + " from URL  " +
-			theme.Key.Render("↑↓/tab") + " move  " + theme.Key.Render("←→/space") + " change  " + theme.Key.Render("esc") + " cancel"
-		content := body + "\n\n" + c.status + "\n" + footer
+		c.formTop = 2 // below the title and the box's top border
+		c.hits = offsetHints(hits, c.formTop+lipgloss.Height(body)+2)
+		for i := range c.hits {
+			c.hits[i].x0++
+			c.hits[i].x1++ // inside the box's left border
+		}
+		content := body + "\n\n" + c.statusLine(m) + "\n" + footer
 		return title + "\n" + components.Box(head, content, w, h-1, true, theme.Accent)
 	}
+	hints := []hint{{key: "enter", label: "connect"}, {key: "ctrl+n", label: "new"}, {key: "ctrl+e", label: "edit"},
+		{key: "ctrl+y", label: "duplicate"}, {key: "ctrl+t", label: "test"}, {key: "ctrl+d", label: "delete"},
+		{key: "ctrl+u", label: "open URL"}, {key: "ctrl+g", label: "DataGrip sync"}, {key: "ctrl+q", label: "quit"}}
+	if len(m.tabs) > 0 {
+		hints = append(hints, hint{key: "esc", label: "back"})
+	}
+	footer, hits := renderHints(hints, w, false)
+	n := lipgloss.Height(footer)
+	boxH := h - 2 - n // the title and the status line take the rest
+	c.hits = offsetHints(hits, 1+boxH+1)
 	listW := min(w*3/5, 90)
 	detailW := w - listW
-	c.picker.SetSize(listW-2, h-5)
+	c.listTop, c.listW = 1, listW
+	c.picker.SetSize(listW-2, boxH-2)
 	list := c.picker.View()
 	if len(m.conns) == 0 {
 		list = "\n  No saved connections.\n\n  Press " + theme.Key.Render("enter") + " or " + theme.Key.Render("ctrl+n") + " to add one."
 	}
-	left := components.Box("Connections", list, listW, h-4, true, theme.Accent)
+	left := components.Box("Connections", list, listW, boxH, true, theme.Accent)
 	var det []string
 	if cfg, ok := c.selected(m); ok {
 		row := func(k, v string) {
@@ -546,15 +693,7 @@ func (c *connManager) view(m *Model, w, h int) string {
 			row("Imported", "DataGrip · :consoles opens its queries")
 		}
 	}
-	right := components.Box("Details", strings.Join(det, "\n"), detailW, h-4, false, theme.Accent)
-	footer := theme.Key.Render("enter") + " connect  " + theme.Key.Render("ctrl+n") + " new  " + theme.Key.Render("ctrl+e") + " edit  " +
-		theme.Key.Render("ctrl+y") + " duplicate  " + theme.Key.Render("ctrl+t") + " test  " + theme.Key.Render("ctrl+d") + " delete  " +
-		theme.Key.Render("ctrl+u") + " open URL  " + theme.Key.Render("ctrl+g") + " DataGrip sync  " + theme.Key.Render("ctrl+q") + " quit"
-	if len(m.tabs) > 0 {
-		footer += "  " + theme.Key.Render("esc") + " back"
-	}
+	right := components.Box("Details", strings.Join(det, "\n"), detailW, boxH, false, theme.Accent)
 	return title + "\n" + lipgloss.JoinHorizontal(lipgloss.Top, left, right) + "\n" +
-		components.FitStyled(c.status, w) + "\n" + components.FitStyled(footer, w)
+		components.FitStyled(c.statusLine(m), w) + "\n" + footer
 }
-
-func (c *connManager) mouse(m *Model, ev mouseEvent) tea.Cmd { return nil }

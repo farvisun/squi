@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/farvisun/squi/internal/sqltext"
 	"github.com/farvisun/squi/internal/ui/components"
@@ -44,6 +45,7 @@ func (m *Model) withParams(t *tab, stmts []sqltext.Statement, opts runOpts) tea.
 }
 
 type paramsModal struct {
+	hits  []hintHit
 	names []string
 	form  *components.Form
 	run   func(map[string]string) tea.Cmd
@@ -61,6 +63,20 @@ func newParamsModal(m *Model, names []string, run func(map[string]string) tea.Cm
 }
 
 func (p *paramsModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
+	if me, ok := msg.(tea.MouseMsg); ok {
+		if k := bodyClick(p.hits, me); k != "" {
+			return p.update(m, keyPress(k))
+		}
+		switch me.Button {
+		case tea.MouseButtonWheelUp:
+			p.form.Wheel(-1)
+		case tea.MouseButtonWheelDown:
+			p.form.Wheel(1)
+		case tea.MouseButtonLeft:
+			p.form.Click(me.X-1, me.Y-1-2) // the note and a blank line sit above the form
+		}
+		return false, nil
+	}
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
 		case "esc", "ctrl+c":
@@ -104,6 +120,8 @@ func (p *paramsModal) view(w, h int) string {
 	if p.warn != "" {
 		lines = append(lines, "", theme.Error.Render(p.warn))
 	}
-	lines = append(lines, "", theme.Key.Render("enter")+" next / run   "+theme.Key.Render("ctrl+s")+" run   "+theme.Key.Render("esc")+" cancel")
+	buttons, hits := renderHints([]hint{{key: "enter", label: "next / run"}, {key: "ctrl+s", label: "run"}, {key: "esc", label: "cancel"}}, bw-2, true)
+	p.hits = offsetHints(hits, lipgloss.Height(strings.Join(lines, "\n"))+1)
+	lines = append(lines, "", buttons)
 	return modalBox("Query parameters", strings.Join(lines, "\n"), bw, theme.Accent)
 }

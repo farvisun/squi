@@ -144,6 +144,9 @@ func (m *Model) handleDragTick(msg dragTickMsg) tea.Cmd {
 var mouseLeak = regexp.MustCompile(`^\[<\d+;\d+;\d+[Mm]$`)
 
 func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
+	if m.tooSmall() {
+		return nil
+	}
 	if m.drag != nil {
 		switch {
 		case msg.Action == tea.MouseActionMotion:
@@ -203,7 +206,9 @@ type dismissible interface{ dismissOnOutsideClick() bool }
 
 func (*menuModal) dismissOnOutsideClick() bool   { return true }
 func (*pickerModal) dismissOnOutsideClick() bool { return true }
-func (*textModal) dismissOnOutsideClick() bool   { return true }
+
+// A text view with its own keys decides something on close, like applying SQL.
+func (t *textModal) dismissOnOutsideClick() bool { return t.onKey == nil }
 
 // anchored is a modal drawn at a screen position instead of centered.
 type anchored interface{ anchor() (x, y int, ok bool) }
@@ -545,5 +550,13 @@ type statusHit struct {
 }
 
 func (m *Model) mouseStatus(t *tab, ev mouseEvent) tea.Cmd {
+	if ev.btn != tea.MouseButtonLeft {
+		return nil
+	}
+	for _, h := range m.frame.status {
+		if ev.x >= h.x0 && ev.x < h.x1 {
+			return h.run()
+		}
+	}
 	return nil
 }

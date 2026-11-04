@@ -32,9 +32,25 @@ type confirmModal struct {
 	danger      bool
 	onYes       func() tea.Cmd
 	onNo        func() tea.Cmd
+	hits        []hintHit
+}
+
+// bodyClick returns the key of the hint under a left click at box-local
+// coordinates, or "".
+func bodyClick(hits []hintHit, me tea.MouseMsg) string {
+	if me.Button != tea.MouseButtonLeft {
+		return ""
+	}
+	return hintAt(hits, me.X-1, me.Y-1)
 }
 
 func (c *confirmModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
+	if me, ok := msg.(tea.MouseMsg); ok {
+		if k := bodyClick(c.hits, me); k != "" {
+			return c.update(m, keyPress(k))
+		}
+		return false, nil
+	}
 	km, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return false, nil
@@ -60,8 +76,10 @@ func (c *confirmModal) view(w, h int) string {
 	if c.danger {
 		accent = theme.Red
 	}
-	body := wrap(c.body, bw-4) + "\n\n" + theme.Key.Render("y") + " yes   " + theme.Key.Render("n") + " no"
-	return modalBox(c.title, body, bw, accent)
+	text := wrap(c.body, bw-4)
+	buttons, hits := renderHints([]hint{{key: "y", label: "yes"}, {key: "n", label: "no"}}, bw-2, true)
+	c.hits = offsetHints(hits, lipgloss.Height(text)+1)
+	return modalBox(c.title, text+"\n\n"+buttons, bw, accent)
 }
 
 // ---- typed confirmation (destructive statements) ----
@@ -71,6 +89,8 @@ type typedConfirmModal struct {
 	expect      string
 	input       textinput.Model
 	onYes       func() tea.Cmd
+	inputLine   int
+	hits        []hintHit
 }
 
 func newTypedConfirm(title, body, expect string, onYes func() tea.Cmd) *typedConfirmModal {
@@ -82,6 +102,15 @@ func newTypedConfirm(title, body, expect string, onYes func() tea.Cmd) *typedCon
 }
 
 func (c *typedConfirmModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
+	if me, ok := msg.(tea.MouseMsg); ok {
+		if k := bodyClick(c.hits, me); k != "" {
+			return c.update(m, keyPress(k)) // enter still needs the typed text
+		}
+		if me.Button == tea.MouseButtonLeft && me.Y-1 == c.inputLine {
+			clickInput(&c.input, me.X-1)
+		}
+		return false, nil
+	}
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
 		case "esc", "ctrl+c":
@@ -101,9 +130,11 @@ func (c *typedConfirmModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
 func (c *typedConfirmModal) view(w, h int) string {
 	bw := min(w-4, max(60, longestLine(c.body)+4))
 	c.input.Width = bw - 8
-	body := wrap(c.body, bw-4) + "\n\n" + "Type " + theme.Bold.Render(c.expect) + " to confirm:\n" + c.input.View() +
-		"\n\n" + theme.Key.Render("enter") + " confirm   " + theme.Key.Render("esc") + " cancel"
-	return modalBox(c.title, body, bw, theme.Red)
+	text := wrap(c.body, bw-4) + "\n\n" + "Type " + theme.Bold.Render(c.expect) + " to confirm:"
+	c.inputLine = lipgloss.Height(text)
+	buttons, hits := renderHints([]hint{{key: "enter", label: "confirm"}, {key: "esc", label: "cancel"}}, bw-2, true)
+	c.hits = offsetHints(hits, c.inputLine+2)
+	return modalBox(c.title, text+"\n"+c.input.View()+"\n\n"+buttons, bw, theme.Red)
 }
 
 // ---- text prompt ----
@@ -116,6 +147,8 @@ type promptModal struct {
 	onCancel     func() tea.Cmd
 	onKey        func(key string, p *promptModal) (bool, tea.Cmd) // custom keys (e.g. ctrl+n = NULL)
 	width        int
+	inputLine    int
+	hits         []hintHit
 }
 
 func newPrompt(title, label, value string, masked bool, onSubmit func(string) tea.Cmd) *promptModal {
@@ -132,6 +165,15 @@ func newPrompt(title, label, value string, masked bool, onSubmit func(string) te
 }
 
 func (p *promptModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
+	if me, ok := msg.(tea.MouseMsg); ok {
+		if k := bodyClick(p.hits, me); k != "" {
+			return p.update(m, keyPress(k))
+		}
+		if me.Button == tea.MouseButtonLeft && me.Y-1 == p.inputLine {
+			clickInput(&p.input, me.X-1)
+		}
+		return false, nil
+	}
 	if km, ok := msg.(tea.KeyMsg); ok {
 		if p.onKey != nil {
 			if done, cmd := p.onKey(km.String(), p); done {
@@ -157,15 +199,18 @@ func (p *promptModal) view(w, h int) string {
 	bw := min(w-4, p.width)
 	p.input.Width = bw - 8
 	body := ""
+	p.inputLine = 0
 	if p.label != "" {
 		body = wrap(p.label, bw-4) + "\n"
+		p.inputLine = lipgloss.Height(body) - 1
 	}
 	body += p.input.View()
-	help := theme.Key.Render("enter") + " ok   " + theme.Key.Render("esc") + " cancel"
+	buttons, hits := renderHints([]hint{{key: "enter", label: "ok"}, {key: "esc", label: "cancel"}}, bw-2, true)
+	p.hits = offsetHints(hits, p.inputLine+2)
+	body += "\n\n" + buttons
 	if p.extra != "" {
-		help += "   " + p.extra
+		body += "\n" + wrap(theme.Dim.Render(p.extra), bw-4)
 	}
-	body += "\n\n" + help
 	return modalBox(p.title, body, bw, theme.Accent)
 }
 
@@ -183,6 +228,21 @@ func newPickerModal(title string, items []components.PickerItem, onPick func(com
 }
 
 func (p *pickerModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
+	if me, ok := msg.(tea.MouseMsg); ok {
+		switch me.Button {
+		case tea.MouseButtonWheelUp:
+			p.picker.ScrollBy(-wheelStep)
+		case tea.MouseButtonWheelDown:
+			p.picker.ScrollBy(wheelStep)
+		case tea.MouseButtonLeft:
+			if i := p.picker.ItemAt(me.Y - 1); i >= 0 {
+				p.picker.SetIndex(i)
+				it, _ := p.picker.Selected()
+				return true, p.onPick(it)
+			}
+		}
+		return false, nil
+	}
 	done, ok, cmd := p.picker.Update(msg)
 	if done && ok {
 		it, _ := p.picker.Selected()
@@ -285,10 +345,11 @@ func (mm *menuModal) view(w, h int) string {
 type textModal struct {
 	title  string
 	tv     *components.TextView
-	footer string
 	onKey  func(key string) (bool, tea.Cmd)
 	width  int
 	height int
+	hints  []hint // the footer, when not the default
+	hits   []hintHit
 }
 
 func newTextModal(title, text, lexer string) *textModal {
@@ -311,6 +372,9 @@ func (t *textModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
 		}
 		t.tv.Update(msg)
 	case tea.MouseMsg:
+		if k := bodyClick(t.hits, msg); k != "" {
+			return t.update(m, keyPress(k))
+		}
 		// msg is box-local; mouseText works in screen coordinates
 		box := m.frame.modal
 		ev := mouseEvent{x: msg.X + box.x, y: msg.Y + box.y, btn: msg.Button, alt: msg.Alt,
@@ -323,10 +387,12 @@ func (t *textModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
 func (t *textModal) view(w, h int) string {
 	bw := min(w-4, t.width)
 	bh := min(h-2, t.height, t.tv.LineCount()+4)
-	footer := t.footer
-	if footer == "" {
-		footer = theme.Key.Render("y") + " copy   " + theme.Key.Render("esc") + " close"
+	hints := t.hints
+	if hints == nil {
+		hints = []hint{{key: "y", label: "copy"}, {key: "esc", label: "close"}}
 	}
+	footer, hits := renderHints(hints, bw-2, false)
+	t.hits = offsetHints(hits, bh-3)
 	t.tv.SetSize(bw-2, bh-4)
 	body := t.tv.View() + "\n" + theme.Dim.Render(strings.Repeat("─", bw-2)) + "\n" + footer
 	return components.Box(t.title, body, bw, bh, true, theme.Accent)
