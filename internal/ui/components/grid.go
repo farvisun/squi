@@ -47,6 +47,14 @@ type Grid struct {
 	markCol  int
 	markDesc bool
 
+	frozen int         // leading columns that stay on screen
+	userW  map[int]int // column widths set by the user
+
+	// a range runs from the anchor to the cursor; rangeRows selects whole rows
+	ranged               bool
+	rangeRows            bool
+	anchorRow, anchorCol int
+
 	// Overlay hooks used by inline editing.
 	CellValue func(row, col int) (db.Cell, CellState)
 	pendingG  bool
@@ -60,9 +68,11 @@ func (g *Grid) SetData(cols, types []string, rows [][]db.Cell) {
 	g.Columns, g.Types, g.rows = cols, types, rows
 	g.row, g.col, g.top, g.left = 0, 0, 0, 0
 	g.sortCol, g.sortDesc, g.filter = -1, false, ""
+	g.frozen, g.userW = 0, nil
+	g.ClearRange()
 	g.widths = make([]int, len(cols))
 	for i, c := range cols {
-		g.widths[i] = runewidth.StringWidth(c)
+		g.widths[i] = runewidth.StringWidth(c) + 1 // room for the sort mark
 	}
 	g.measure(rows)
 	g.rebuild()
@@ -112,6 +122,11 @@ func (g *Grid) measure(rows [][]db.Cell) {
 		}
 		if g.widths[i] < 1 {
 			g.widths[i] = 1
+		}
+	}
+	for c, w := range g.userW {
+		if c < len(g.widths) {
+			g.widths[c] = w
 		}
 	}
 }
@@ -170,13 +185,14 @@ func cellLess(a, b db.Cell) bool {
 }
 
 // SetFilter filters rows by substring (case-insensitive).
-func (g *Grid) SetFilter(f string) { g.filter = f; g.rebuild() }
+func (g *Grid) SetFilter(f string) { g.filter = f; g.ClearRange(); g.rebuild() }
 
 // Filter returns the active filter.
 func (g *Grid) Filter() string { return g.filter }
 
 // ToggleSort cycles sorting of the cursor column: asc, desc, none.
 func (g *Grid) ToggleSort() {
+	g.ClearRange()
 	switch {
 	case g.sortCol != g.col:
 		g.sortCol, g.sortDesc = g.col, false
@@ -201,6 +217,9 @@ func (g *Grid) SetCursor(row, col int) {
 
 // SetSize sets the outer size.
 func (g *Grid) SetSize(w, h int) { g.width, g.height = w, h; g.clamp() }
+
+// Size returns the outer size.
+func (g *Grid) Size() (int, int) { return g.width, g.height }
 
 // Focus / Blur.
 func (g *Grid) Focus()        { g.focused = true }
@@ -231,7 +250,9 @@ func (g *Grid) SetCursorRow(r int) {
 }
 
 // AtBottom reports whether the cursor is near the last loaded row.
-func (g *Grid) AtBottom() bool { return len(g.view) > 0 && g.row >= len(g.view)-3 }
+func (g *Grid) AtBottom() bool {
+	return len(g.view) > 0 && (g.row >= len(g.view)-3 || g.top+g.bodyHeight() >= len(g.view)-3)
+}
 
 func (g *Grid) bodyHeight() int { return max(0, g.height-2) }
 
@@ -248,11 +269,19 @@ func (g *Grid) clamp() {
 	if g.top < 0 {
 		g.top = 0
 	}
+	f := g.frozenCols()
+	if g.left < f {
+		g.left = f
+	}
+	if g.col < f {
+		return // frozen columns are always on screen
+	}
 	if g.col < g.left {
 		g.left = g.col
 	}
 	// ensure cursor column fully visible
-	for g.left < g.col && g.colsWidth(g.left, g.col) > g.width-g.gutter() {
+	avail := g.width - g.gutter() - g.frozenWidth(f)
+	for g.left < g.col && g.colsWidth(g.left, g.col) > avail {
 		g.left++
 	}
 }
@@ -279,6 +308,8 @@ func (g *Grid) Update(msg tea.KeyMsg) bool {
 		}
 	}
 	bh := max(1, g.bodyHeight())
+	had := g.ranged
+	g.ClearRange()
 	switch k {
 	case "j", "down":
 		g.row++
@@ -315,14 +346,20 @@ func (g *Grid) Update(msg tea.KeyMsg) bool {
 	case "L":
 		g.row = g.top + bh - 1
 	default:
+		g.ranged = had
 		return false
 	}
 	g.clamp()
 	return true
 }
 
-// Scroll moves the cursor by n rows (mouse wheel).
-func (g *Grid) Scroll(n int) { g.row += n; g.clamp() }
+// Scroll moves the view by n rows, keeping the cursor on screen.
+func (g *Grid) Scroll(n int) {
+	bh := max(1, g.bodyHeight())
+	g.top = clampInt(g.top+n, 0, max(0, len(g.view)-bh))
+	g.row = clampInt(g.row, g.top, g.top+bh-1)
+	g.clamp()
+}
 
 // View renders the grid.
 func (g *Grid) View() string {
@@ -330,30 +367,21 @@ func (g *Grid) View() string {
 		return PadLines(theme.Dim.Render("(no columns)"), g.width, g.height)
 	}
 	gw := g.gutter()
-	avail := g.width - gw
-	var visCols []int
-	used := 0
-	for c := g.left; c < len(g.Columns); c++ {
-		w := g.widths[c] + 3
-		if used+w > avail && len(visCols) > 0 {
-			// include partially visible last column
-			if avail-used > 4 {
-				visCols = append(visCols, c)
-			}
-			break
+	spans := g.columnSpans()
+	f := g.frozenCols()
+	sepFor := func(c int) string {
+		if c == f-1 {
+			return theme.Dim.Render("┃")
 		}
-		visCols = append(visCols, c)
-		used += w
+		return theme.Dim.Render("│")
 	}
-	sep := theme.Dim.Render("│")
 	var lines []string
 
 	// header
 	var hb strings.Builder
 	hb.WriteString(strings.Repeat(" ", gw))
-	usedW := gw
-	for _, c := range visCols {
-		w := g.widths[c]
+	for _, s := range spans {
+		c := s.col
 		name := g.Columns[c]
 		if c == g.sortCol || (g.sortCol < 0 && c == g.markCol) {
 			if g.sortDesc || (g.sortCol < 0 && g.markDesc) {
@@ -362,22 +390,21 @@ func (g *Grid) View() string {
 				name += "▲"
 			}
 		}
-		cellW := min(w, g.width-usedW-3)
-		if cellW < 1 {
-			break
-		}
 		st := theme.Header
 		if c == g.col && g.focused {
 			st = st.Underline(true)
 		}
-		hb.WriteString(" " + st.Render(Fit(name, cellW)) + " " + sep)
-		usedW += cellW + 3
+		hb.WriteString(" " + st.Render(Fit(name, s.w)) + " " + sepFor(c))
 	}
 	lines = append(lines, hb.String())
 	var sb strings.Builder
 	sb.WriteString(strings.Repeat("─", gw))
-	for _, c := range visCols {
-		sb.WriteString(strings.Repeat("─", g.widths[c]+2) + "┼")
+	for _, s := range spans {
+		cross := "┼"
+		if s.col == f-1 {
+			cross = "╂"
+		}
+		sb.WriteString(strings.Repeat("─", s.w+2) + cross)
 	}
 	lines = append(lines, theme.Dim.Render(Fit(sb.String(), g.width)))
 
@@ -391,16 +418,12 @@ func (g *Grid) View() string {
 		ri := g.view[vi]
 		var rb strings.Builder
 		rb.WriteString(numStyle.Render(Fit(strconv.Itoa(ri+1), gw-1)) + " ")
-		usedW := gw
 		rowState := CellClean
 		if g.CellValue != nil && len(g.Columns) > 0 {
 			_, rowState = g.CellValue(ri, -1)
 		}
-		for _, c := range visCols {
-			cellW := min(g.widths[c], g.width-usedW-3)
-			if cellW < 1 {
-				break
-			}
+		for _, s := range spans {
+			c, cellW := s.col, s.w
 			var v db.Cell
 			state := rowState
 			if g.CellValue != nil {
@@ -433,15 +456,17 @@ func (g *Grid) View() string {
 			case CellDeleted:
 				st = st.Background(theme.DeletedBg).Strikethrough(true)
 			}
-			if vi == g.row {
-				if c == g.col && g.focused {
-					st = theme.Cursor
-				} else {
+			switch {
+			case vi == g.row && c == g.col && g.focused:
+				st = theme.Cursor
+			case g.ranged:
+				if g.inRange(vi, c) {
 					st = st.Background(theme.SelBg)
 				}
+			case vi == g.row:
+				st = st.Background(theme.SelBg)
 			}
-			rb.WriteString(st.Render(" "+txt+" ") + sep)
-			usedW += cellW + 3
+			rb.WriteString(st.Render(" "+txt+" ") + sepFor(c))
 		}
 		lines = append(lines, rb.String())
 	}
