@@ -4,8 +4,9 @@
   <div class="wrap">
     {{if .Version}}<a class="pill" href="https://github.com/farvisun/squi/releases/latest">{{.Version}} · see what's new</a>{{end}}
     <h1>SQL in your terminal.<br><span class="accent">Fast, and safe on production.</span></h1>
-    <p class="lead">squi is a keyboard-driven SQL client: browse schemas, write queries with
-      completion, edit rows and read query plans, locally or on a server you reached over SSH.
+    <p class="lead">squi is a keyboard-driven SQL client with full mouse support: browse schemas,
+      write queries with completion, edit rows and read query plans, locally or on a server you
+      reached over SSH.
       One small static binary.</p>
     <div class="cta">
       <div class="cmd"><code><span class="dim">$</span> brew install farvisun/tap/squi</code>
@@ -27,7 +28,7 @@
 <section id="features" class="section">
   <div class="wrap">
     <h2>Everything you reach for in a GUI client</h2>
-    <p class="sub">A DataGrip-style workflow without the weight, built for the keyboard.</p>
+    <p class="sub">A DataGrip-style workflow without the weight, built for the keyboard, with the mouse there when you want it.</p>
     <div class="grid">
       <article><h3>Explore</h3><p>Databases, schemas, tables, views and routines, with columns, indexes, foreign keys, DDL and sizes a key away.</p></article>
       <article><h3>Query</h3><p>Tabs with syntax highlighting, context-aware completion, vim or standard keys, a formatter and your <code>$EDITOR</code>.</p></article>
@@ -46,6 +47,30 @@
   <div class="wrap split">
     <div>
       <span class="tag">New</span>
+      <h2>The mouse works everywhere</h2>
+      <p>Click, drag, scroll and right-click on tabs, panes, the editor, the result grid, dialogs and
+        the status bar. Resize panes and columns, freeze columns, and select text or a range of cells
+        to copy. Every action still has a key, and your layout is there next time.</p>
+      <a class="more" href="docs.html#mouse">Everything the mouse can do →</a>
+    </div>
+    <pre class="code"><span class="c"> 1 prod-api × │ 2 staging × │ +</span>
+
+ id <span class="c">│</span> <span class="k">name▲</span>    <span class="c">┃</span> email
+<span class="c">────┼──────────╂───────────────────</span>
+  1 <span class="c">│</span> Ada      <span class="c">┃</span> <span class="p">ada@example.com</span>
+  2 <span class="c">│</span> Grace    <span class="c">┃</span> <span class="p">grace@example.com</span>
+  3 <span class="c">│</span> Edsger   <span class="c">┃</span> <span class="p">edsger@example.com</span>
+              <span class="c">╭─ Result ───────────╮
+              │ y  Copy selection  │
+              │ =  Filter by value │
+              │ z  Freeze columns  │
+              ╰────────────────────╯</span></pre>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap split">
+    <div>
       <h2>Query parameters</h2>
       <p>Write <code>:name</code>, <code>$1</code> or <code>?</code> and squi asks for the values before
         the query runs, then remembers them, so the next run is one key. Strings, comments, casts and
@@ -65,10 +90,9 @@
   </div>
 </section>
 
-<section class="section">
+<section class="section alt">
   <div class="wrap split">
     <div>
-      <span class="tag">New</span>
       <h2>Schema diff</h2>
       <p><code>squi diff staging prod</code> compares tables, columns, primary keys, indexes, foreign
         keys and views, then writes the <code>ALTER</code> script that brings the target in line.
@@ -88,7 +112,7 @@
   </div>
 </section>
 
-<section class="section alt">
+<section class="section">
   <div class="wrap">
     <h2>Built for production databases</h2>
     <p class="sub">The guard rails are on by default, because the scary server is the one you open most.</p>
@@ -103,7 +127,7 @@
   </div>
 </section>
 
-<section id="install" class="section">
+<section id="install" class="section alt">
   <div class="wrap">
     <h2>Install</h2>
     <p class="sub">macOS, Linux and Windows. No runtime, no daemon.</p>
@@ -113,6 +137,7 @@
       <div class="row"><span>Go 1.26+</span><code>go install github.com/farvisun/squi/cmd/squi@latest</code><button data-copy="go install github.com/farvisun/squi/cmd/squi@latest">Copy</button></div>
       <div class="row"><span>Linux packages</span><code>.deb, .rpm and .apk on the releases page</code><a class="btn small" href="https://github.com/farvisun/squi/releases/latest">Releases</a></div>
     </div>
+    <p class="sub">squi tells you when a new release is out, and can update a downloaded binary itself. <a href="docs.html#updates">How updates work</a></p>
 
     <h3 class="keys-title">Then</h3>
     <pre class="code"><span class="dim">$</span> squi                                   <span class="c"># connection manager</span>

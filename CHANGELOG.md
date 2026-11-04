@@ -2,9 +2,17 @@
 
 All notable changes to squi. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.7.0 — 2026-11-04
 
 ### Added
+- Update checker: squi looks for a new release at most once a day in the background and
+  shows it in the status bar and connection manager. `:update` checks now. The check
+  sends GitHub the usual request details, such as the machine's IP address; turn it off
+  with `check_updates = false` or `SQUI_NO_UPDATE_CHECK=1`.
+- Self-update for downloaded binaries: after you confirm, squi downloads the release,
+  verifies it against the release's checksums, checks that it runs, and replaces the
+  binary. Homebrew, Scoop, `go install` and system package installs are never replaced;
+  squi shows the command to run or points to the release page instead.
 - Full mouse support: click, double-click, drag, wheel and right-click on tabs, panes,
   editor, result grid, explorer, output tabs, dialogs, forms, the connection manager
   and the status bar.
@@ -48,6 +56,7 @@ All notable changes to squi. Versions follow [semantic versioning](https://semve
   selection on screen while filtered.
 - The editor's placeholder also shows while it has focus.
 - Sort marks fit in narrow columns.
+- `squi --version` reports the real version for `go install …@version` builds.
 
 ## 0.6.0 — 2026-10-31
 

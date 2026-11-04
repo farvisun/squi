@@ -56,6 +56,8 @@ server you reached over SSH.
 - **Compare schemas**: `squi diff staging prod` lists what differs in tables,
   columns, indexes and foreign keys, and writes the `ALTER` script to align them.
 - **Make it yours**: rebind any key, format SQL, open the query in `$EDITOR`.
+- **Stay current**: squi tells you when a new release is out and can update a
+  downloaded binary itself. Turn it off with `check_updates = false`.
 - **Pick up where you left off** — tabs and queries are restored on the next start.
 
 ## Install

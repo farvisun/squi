@@ -83,6 +83,28 @@ enables writes.
 (`option` in iTerm2, `fn` in Terminal.app), or turn mouse capture off with `ctrl+w m` or
 `:mouse`. `--no-mouse` starts with it off.
 
+## Updates
+
+squi looks for a new release at most once a day, in the background. When one exists,
+`↑ 0.8.0` appears in the status bar and the connection manager. Click it, or run
+`:update` to check right away, to see what's new.
+
+| Installed with | What the dialog offers |
+|---|---|
+| Downloaded binary | **Update now**: after you confirm, squi downloads the release, verifies its checksum, checks that it runs and replaces the binary. Restart to use it |
+| Homebrew, Scoop, `go install` | The command to run, ready to copy. squi never replaces files a package manager owns |
+| `.deb`, `.rpm`, `.apk` | A link to the release page |
+
+`s` skips a version until a newer one appears.
+
+The check is a plain request to the GitHub API, which sees the machine's IP address.
+It sends nothing about your connections or data, and failures stay silent. Turn it off
+with `check_updates = false` in `settings.toml` or `SQUI_NO_UPDATE_CHECK=1`; `:update`
+still works. Builds from source without a release version never check.
+
+Checksums come from the same release as the download, so they catch corrupt and
+altered downloads but not a compromised release.
+
 ## Essential keys
 
 | Where | Keys |
@@ -96,7 +118,7 @@ enables writes.
 Useful commands: `:use [db] [schema]`, `:commit`, `:rollback`, `:tx` (manual
 transactions), `:timeout 2m` (this tab's statement timeout; `0` for none),
 `:format`, `:edit`, `:open <name|url>`, `:consoles` (DataGrip queries), `:export`, `:snippet <name>`, `:snippets`,
-`:keys`, `:mouse`, `:set novim`, `:set fetch=5000`.
+`:keys`, `:mouse`, `:update`, `:set novim`, `:set fetch=5000`.
 
 Every binding above can be changed; see [Key bindings](#key-bindings).
 
@@ -223,7 +245,7 @@ buffer.
 | File | Purpose |
 |---|---|
 | `~/.config/squi/connections.toml` | Connection profiles (no secrets) |
-| `~/.config/squi/settings.toml` | Preferences: `vim_mode`, `fetch_size`, `max_column_width`, `explorer_width`, `manual_transactions`, `confirm_all_writes_on_prod`, `history_limit`, `restore_session`, `query_parameters` |
+| `~/.config/squi/settings.toml` | Preferences: `vim_mode`, `fetch_size`, `max_column_width`, `explorer_width`, `manual_transactions`, `confirm_all_writes_on_prod`, `history_limit`, `restore_session`, `query_parameters`, `check_updates` |
 | `~/.config/squi/snippets.toml` | Saved SQL snippets |
 | `~/.local/state/squi/history/` | Query history (JSONL) |
 | `~/.local/state/squi/session.json` | Open tabs and their SQL, restored at start |
