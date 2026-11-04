@@ -122,3 +122,12 @@ func (m *Model) copy(text, what string) tea.Cmd {
 	}
 	return m.toast("Copied "+what, toastInfo)
 }
+
+// pasteText returns the system clipboard's text, or fallback when it can't be
+// read (over SSH, or without a clipboard tool).
+func pasteText(fallback string) string {
+	if s, err := clipboard.ReadAll(); err == nil && s != "" {
+		return s
+	}
+	return fallback
+}

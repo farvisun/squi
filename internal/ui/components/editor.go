@@ -80,6 +80,9 @@ type Editor struct {
 	width   int
 	height  int
 	focused bool
+	// viewDetached keeps the view where the wheel left it, away from the
+	// cursor, until the next key or edit.
+	viewDetached bool
 
 	Vim         bool
 	mode        EditorMode
@@ -120,7 +123,12 @@ func NewEditor(vim bool, lexer string) *Editor {
 }
 
 // SetSize sets the outer size of the editor.
-func (e *Editor) SetSize(w, h int) { e.width, e.height = w, h; e.scroll() }
+func (e *Editor) SetSize(w, h int) {
+	e.width, e.height = w, h
+	if !e.viewDetached {
+		e.scroll()
+	}
+}
 
 // Focus gives the editor keyboard focus.
 func (e *Editor) Focus() { e.focused = true }
@@ -207,6 +215,7 @@ func (e *Editor) posOf(off int) pos {
 
 // SetCursorOffset moves the cursor to a byte offset.
 func (e *Editor) SetCursorOffset(off int) {
+	e.viewDetached = false
 	e.cur = e.posOf(off)
 	e.clampCursor()
 	e.scroll()
@@ -274,6 +283,7 @@ func (e *Editor) acceptCompletion() {
 
 // Update handles a key and reports what the host should do.
 func (e *Editor) Update(msg tea.KeyMsg) EditorAction {
+	e.viewDetached = false
 	if e.complOn {
 		switch msg.String() {
 		case "enter":
@@ -311,6 +321,7 @@ func (e *Editor) Update(msg tea.KeyMsg) EditorAction {
 }
 
 func (e *Editor) changed() {
+	e.viewDetached = false
 	e.dirtyHL = true
 	e.errPos = nil
 	e.redo = nil
@@ -1446,27 +1457,15 @@ func (e *Editor) View() string {
 	}
 	view := strings.Join(out, "\n")
 	if e.complOn && e.focused {
-		view = e.overlayCompletion(view, gw)
+		view = e.overlayCompletion(view)
 	}
 	return view
 }
 
-func (e *Editor) overlayCompletion(view string, gw int) string {
-	const maxItems = 8
+func (e *Editor) overlayCompletion(view string) string {
 	items := e.compl
-	start := 0
-	if e.complIx >= maxItems {
-		start = e.complIx - maxItems + 1
-	}
-	end := min(len(items), start+maxItems)
-	lw, dw := 0, 0
-	for _, it := range items[start:end] {
-		lw = max(lw, runewidth.StringWidth(it.Label))
-		dw = max(dw, runewidth.StringWidth(it.Detail)+runewidth.StringWidth(it.Kind)+1)
-	}
-	lw = min(lw, 40)
-	dw = min(dw, 30)
-	w := lw + dw + 3
+	start, end, x, y, w, _ := e.complGeometry()
+	lw, dw := e.complWidths(start, end)
 	var rows []string
 	for i := start; i < end; i++ {
 		it := items[i]
@@ -1477,17 +1476,9 @@ func (e *Editor) overlayCompletion(view string, gw int) string {
 		}
 		rows = append(rows, st.Render(txt))
 	}
-	if len(items) > maxItems {
+	if len(items) > complMaxItems {
 		rows = append(rows, lipgloss.NewStyle().Background(theme.BarBg).Foreground(theme.Muted).
 			Render(Fit(" "+strconv.Itoa(e.complIx+1)+"/"+strconv.Itoa(len(items)), w)))
-	}
-	x := gw + displayCol(e.lines[e.complAt.r], e.complAt.c) - e.left
-	y := e.cur.r - e.top + 1
-	if y+len(rows) > e.height && e.cur.r-e.top-len(rows) >= 0 {
-		y = e.cur.r - e.top - len(rows)
-	}
-	if x+w > e.width {
-		x = max(0, e.width-w)
 	}
 	return Overlay(view, strings.Join(rows, "\n"), x, y)
 }
