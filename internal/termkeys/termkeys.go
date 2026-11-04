@@ -83,14 +83,20 @@ func (in *Input) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// incompleteCSI returns where a trailing, unfinished "ESC [ digits" sequence
-// starts, or -1.
+// incompleteCSI returns where a trailing, unfinished "ESC [ [<] digits"
+// sequence starts, or -1. A mouse report split across reads must be held back
+// too, or its tail would reach the program as typed text. A lone trailing ESC
+// is passed on: it is the escape key far more often than half a sequence.
 func incompleteCSI(b []byte) int {
 	i := bytes.LastIndexByte(b, 0x1b)
-	if i < 0 || len(b)-i < 3 || b[i+1] != '[' {
+	if i < 0 || len(b)-i < 2 || b[i+1] != '[' {
 		return -1
 	}
-	for _, c := range b[i+2:] {
+	rest := b[i+2:]
+	if len(rest) > 0 && rest[0] == '<' {
+		rest = rest[1:]
+	}
+	for _, c := range rest {
 		if (c < '0' || c > '9') && c != ';' && c != ':' {
 			return -1
 		}

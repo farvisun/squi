@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"testing"
+	"time"
 )
 
 func flat(c [][]byte) string { return string(bytes.Join(c, nil)) }
@@ -68,5 +69,37 @@ func TestInputHoldsPartialSequence(t *testing.T) {
 	}
 	if string(all) != "x\n" {
 		t.Fatalf("got %q", all)
+	}
+}
+
+func TestInputHoldsSplitMouseReport(t *testing.T) {
+	report := "\x1b[<0;10;5M"
+	for cut := 2; cut < len(report); cut++ {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		in := Wrap(r)
+		go func(cut int) {
+			w.Write([]byte(report[:cut]))
+			time.Sleep(time.Millisecond)
+			w.Write([]byte(report[cut:]))
+			w.Close()
+		}(cut)
+		var chunks []string
+		buf := make([]byte, 64)
+		for {
+			n, err := in.Read(buf)
+			if n > 0 {
+				chunks = append(chunks, string(buf[:n]))
+			}
+			if err != nil {
+				break
+			}
+		}
+		r.Close()
+		if len(chunks) != 1 || chunks[0] != report {
+			t.Errorf("cut at %d: got %q", cut, chunks)
+		}
 	}
 }
