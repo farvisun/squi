@@ -181,7 +181,7 @@ func drain(m *Model, cmd tea.Cmd) {
 			continue
 		}
 		switch msg := runQuick(c).(type) {
-		case nil, tickMsg, spinner.TickMsg, tea.QuitMsg:
+		case nil, tickMsg, spinner.TickMsg, tea.QuitMsg, dragTickMsg:
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
 		default:

@@ -556,3 +556,5 @@ func (c *connManager) view(m *Model, w, h int) string {
 	return title + "\n" + lipgloss.JoinHorizontal(lipgloss.Top, left, right) + "\n" +
 		components.FitStyled(c.status, w) + "\n" + components.FitStyled(footer, w)
 }
+
+func (c *connManager) mouse(m *Model, ev mouseEvent) tea.Cmd { return nil }

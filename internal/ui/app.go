@@ -48,6 +48,8 @@ type Options struct {
 	// TermWrite writes raw control sequences to the terminal; set when the
 	// input is wrapped by termkeys (enables extended key reporting).
 	TermWrite func(string)
+	// Mouse tells the UI that mouse reporting is on at startup.
+	Mouse bool
 	// DataGripRoot is the JetBrains configuration root (default: the
 	// platform's); tests point it elsewhere.
 	DataGripRoot string
@@ -91,6 +93,13 @@ type Model struct {
 	toastUntil time.Time
 	spinner    spinner.Model
 	jobs       int
+	mouseOn    bool
+	frame      frame
+	clicks     clickTracker
+	drag       *dragState
+	dragSeq    int
+	tabScroll  int
+	lastLayout config.Layout
 	width      int
 	height     int
 	startErr   string
@@ -119,14 +128,16 @@ func New(o Options) (*Model, error) {
 		active:       map[string]*activeConn{},
 		connecting:   map[string]bool{},
 		explorerW:    st.ExplorerWidth,
-		editorPct:    40,
+		editorPct:    defaultPct,
 		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		autoConn:     o.Connect,
 		termWrite:    o.TermWrite,
+		mouseOn:      o.Mouse,
 	}
 	if err != nil {
 		m.startErr = err.Error()
 	}
+	m.loadLayout()
 	keys, warns := keymap.New(st.Keys)
 	m.keys = keys
 	if len(warns) > 0 && m.startErr == "" {
@@ -567,7 +578,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.MouseMsg:
 		return m, m.handleMouse(msg)
+	case dragTickMsg:
+		return m, m.handleDragTick(msg)
 	case tea.KeyMsg:
+		m.endDrag() // a release that never arrived must not leave a drag running
+		if msg.Type == tea.KeyRunes && !msg.Paste && mouseLeak.MatchString(string(msg.Runes)) {
+			return m, nil
+		}
 		// Fast typing, SSH latency or an unbracketed paste can deliver several
 		// runes in one message. Its String() is the text itself, so "end",
 		// "up" or "esc" would match key bindings; handle each rune on its own.
@@ -636,12 +653,12 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 		return nil
 	case "next_tab":
 		if len(m.tabs) > 0 {
-			m.cur = (m.cur + 1) % len(m.tabs)
+			m.switchTab(1)
 			return nil
 		}
 	case "prev_tab":
 		if len(m.tabs) > 0 {
-			m.cur = (m.cur - 1 + len(m.tabs)) % len(m.tabs)
+			m.switchTab(-1)
 			return nil
 		}
 	case "toggle_explorer":
@@ -649,6 +666,7 @@ func (m *Model) handleKey(km tea.KeyMsg) tea.Cmd {
 		if m.hideExplore && m.focus == focusExplorer {
 			m.focus = focusEditor
 		}
+		m.saveLayout()
 		return nil
 	case "focus_prev":
 		m.cycleFocus(-1)
@@ -785,13 +803,19 @@ func (m *Model) windowKey(k string) tea.Cmd {
 	case "z", "o":
 		m.zoom = !m.zoom
 	case "<":
-		m.explorerW = max(16, m.explorerW-4)
+		m.setExplorerW(m.explorerW - 4)
+		m.saveLayout()
 	case ">":
-		m.explorerW = min(m.width/2, m.explorerW+4)
+		m.setExplorerW(m.explorerW + 4)
+		m.saveLayout()
 	case "-":
-		m.editorPct = max(15, m.editorPct-5)
+		m.setEditorPct(m.editorPct - 5)
+		m.saveLayout()
 	case "+", "=":
-		m.editorPct = min(85, m.editorPct+5)
+		m.setEditorPct(m.editorPct + 5)
+		m.saveLayout()
+	case "m":
+		return m.toggleMouse()
 	case "q", "c":
 		if t := m.currentTab(); t != nil {
 			return m.confirmCloseTab(t)
@@ -878,77 +902,6 @@ func (m *Model) newTabPicker() tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
-	if len(m.modals) > 0 {
-		md := m.modals[len(m.modals)-1]
-		if done, cmd := md.update(m, msg); done {
-			m.removeModal(md)
-			return cmd
-		}
-		return nil
-	}
-	if m.screen != screenMain {
-		return nil
-	}
-	t := m.currentTab()
-	if t == nil {
-		return nil
-	}
-	l := m.layout()
-	area := focusOutput
-	switch {
-	case !l.hideExplorer && msg.X < l.explorerW:
-		area = focusExplorer
-	case msg.Y < 1+l.editorH:
-		area = focusEditor
-	}
-	if msg.Y == 0 && msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
-		m.clickTabBar(msg.X)
-		return nil
-	}
-	switch msg.Button {
-	case tea.MouseButtonWheelUp, tea.MouseButtonWheelDown:
-		n := 3
-		if msg.Button == tea.MouseButtonWheelUp {
-			n = -3
-		}
-		switch area {
-		case focusOutput:
-			if s, ok := t.out.current().(scroller); ok {
-				s.scroll(n)
-			}
-			if r, ok := t.out.current().(*resultPanel); ok {
-				return r.maybeFetch(m, t)
-			}
-		case focusExplorer:
-			if e := t.ac.explorer; e != nil {
-				e.ix = clampIx(e.ix+n, len(e.flat))
-			}
-		}
-	case tea.MouseButtonLeft:
-		if msg.Action != tea.MouseActionPress {
-			return nil
-		}
-		m.focus = area
-		if area == focusExplorer && t.ac.explorer != nil {
-			return t.ac.explorer.click(m, msg.Y-2, msg.X)
-		}
-	}
-	return nil
-}
-
-func (m *Model) clickTabBar(x int) {
-	pos := 0
-	for i, t := range m.tabs {
-		w := lipgloss.Width(m.tabLabel(i, t)) + 1
-		if x >= pos && x < pos+w {
-			m.cur = i
-			return
-		}
-		pos += w
-	}
-}
-
 // ---- view ----
 
 type layout struct {
@@ -964,16 +917,17 @@ func (m *Model) layout() layout {
 	bodyH := m.height - 2
 	l := layout{bodyH: bodyH, hideExplorer: m.hideExplore}
 	if !l.hideExplorer {
-		l.explorerW = min(m.explorerW, m.width/3)
+		l.explorerW = min(m.explorerW, m.width/2)
 	}
 	l.rightW = m.width - l.explorerW
-	l.editorH = max(5, bodyH*m.editorPct/100)
+	l.editorH = max(minPaneH, min(bodyH*m.editorPct/100, bodyH-minPaneH))
 	l.outputH = bodyH - l.editorH
 	return l
 }
 
 // View renders the UI.
 func (m *Model) View() string {
+	m.frame = frame{}
 	if m.width < 50 || m.height < 14 {
 		return "Terminal too small for squi (need 50×14)."
 	}
@@ -990,7 +944,8 @@ func (m *Model) View() string {
 	for _, md := range m.modals {
 		box := md.view(m.width, m.height)
 		bw, bh := lipgloss.Width(box), lipgloss.Height(box)
-		x, y := components.Center(m.width, m.height, bw, bh)
+		x, y := m.modalPosition(md, bw, bh)
+		m.frame.modal = rect{x, y, bw, bh}
 		base = components.Overlay(base, box, x, y)
 	}
 	return base
@@ -1004,6 +959,7 @@ func (m *Model) tabLabel(i int, t *tab) string {
 	if t.inTx {
 		label += " ●"
 	}
+	label += " ×"
 	st := theme.InactiveTab
 	if i == m.cur {
 		st = theme.ActiveTab
@@ -1020,13 +976,7 @@ func (m *Model) mainView() string {
 	t := m.currentTab()
 	l := m.layout()
 
-	// tab bar
-	var tabs []string
-	for i, x := range m.tabs {
-		tabs = append(tabs, m.tabLabel(i, x))
-	}
-	bar := strings.Join(tabs, " ") + " " + theme.Dim.Render("ctrl+t new")
-	bar = components.FitStyled(bar, m.width)
+	bar := components.FitStyled(m.tabBar(), m.width)
 
 	var body string
 	explorerBox := func(w, h int) string {
@@ -1053,15 +1003,24 @@ func (m *Model) mainView() string {
 		return components.Box("", t.out.view(w-2, h-2, m.focus == focusOutput), w, h, m.focus == focusOutput, theme.Accent)
 	}
 	if m.zoom {
+		full := rect{0, 1, m.width, l.bodyH}
 		switch m.focus {
 		case focusExplorer:
+			m.frame.explorer = full
 			body = explorerBox(m.width, l.bodyH)
 		case focusEditor:
+			m.frame.editor = full
 			body = editorBox(m.width, l.bodyH)
 		default:
+			m.frame.output = full
 			body = outputBox(m.width, l.bodyH)
 		}
 	} else {
+		m.frame.editor = rect{l.explorerW, 1, l.rightW, l.editorH}
+		m.frame.output = rect{l.explorerW, 1 + l.editorH, l.rightW, l.outputH}
+		if !l.hideExplorer {
+			m.frame.explorer = rect{0, 1, l.explorerW, l.bodyH}
+		}
 		right := editorBox(l.rightW, l.editorH) + "\n" + outputBox(l.rightW, l.outputH)
 		if l.hideExplorer {
 			body = right
@@ -1077,7 +1036,7 @@ func (m *Model) statusBar(t *tab) string {
 		return components.FitStyled(m.cmdline.View(), m.width)
 	}
 	if m.winPrefix {
-		return components.FitStyled(theme.Key.Render("ctrl+w")+" h/j/k/l focus · z zoom · </> explorer width · -/+ editor height · q close tab · n new tab", m.width)
+		return components.FitStyled(theme.Key.Render("ctrl+w")+" h/j/k/l focus · z zoom · </> explorer width · -/+ editor height · m mouse · q close tab · n new tab", m.width)
 	}
 	cfg := t.ac.cfg
 	bg := lipgloss.TerminalColor(theme.BarBg)

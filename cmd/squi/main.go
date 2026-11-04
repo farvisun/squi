@@ -130,7 +130,7 @@ func run(configDir, connect string, mouse bool) error {
 		store = config.NewStore(configDir)
 	}
 	bridge := &ui.Bridge{}
-	o := ui.Options{Store: store, Secrets: secrets.Keyring{}, Bridge: bridge, Connect: connect}
+	o := ui.Options{Store: store, Secrets: secrets.Keyring{}, Bridge: bridge, Connect: connect, Mouse: mouse}
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
 	// Extended key reporting (for ctrl+enter) needs our own input filter;
 	// Windows consoles deliver keys through a different API.

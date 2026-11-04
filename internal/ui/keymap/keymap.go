@@ -44,7 +44,7 @@ var Defaults = []Binding{
 	{"new_tab", Global, []string{"ctrl+t"}, "new tab"},
 	{"next_tab", Global, []string{"alt+]", "ctrl+pgdown", "alt+right"}, "next tab"},
 	{"prev_tab", Global, []string{"alt+[", "ctrl+pgup", "alt+left"}, "previous tab"},
-	{"window", Global, []string{"ctrl+w"}, "window prefix: h/j/k/l focus · z zoom · </> explorer width · -/+ editor height · q close tab"},
+	{"window", Global, []string{"ctrl+w"}, "window prefix: h/j/k/l focus · z zoom · </> explorer width · -/+ editor height · m mouse · q close tab"},
 	{"focus_next", Global, []string{"tab"}, "focus next pane"},
 	{"focus_prev", Global, []string{"shift+tab"}, "focus previous pane"},
 	{"toggle_explorer", Global, []string{"ctrl+b"}, "show / hide the explorer"},

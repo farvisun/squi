@@ -535,7 +535,7 @@ func (e *explorer) click(m *Model, row, x int) tea.Cmd {
 		row-- // the filter line sits above the tree
 	}
 	i := e.top + row
-	if i < 0 || i >= len(e.flat) {
+	if row < 0 || i >= len(e.flat) {
 		return nil
 	}
 	n := e.flat[i]

@@ -210,9 +210,32 @@ type menuModal struct {
 	title string
 	items []menuItem
 	ix    int
+	// at places the menu at the pointer (a context menu).
+	at       bool
+	atX, atY int
+}
+
+func (mm *menuModal) anchor() (int, int, bool) { return mm.atX, mm.atY, mm.at }
+
+// pushMenu opens a context menu at (x, y).
+func (m *Model) pushMenu(title string, items []menuItem, x, y int) {
+	m.push(&menuModal{title: title, items: items, at: true, atX: x, atY: y})
 }
 
 func (mm *menuModal) update(m *Model, msg tea.Msg) (bool, tea.Cmd) {
+	if me, ok := msg.(tea.MouseMsg); ok {
+		// the items start below the top border
+		if i := me.Y - 1; me.Button == tea.MouseButtonLeft && i >= 0 && i < len(mm.items) {
+			return true, mm.items[i].run()
+		}
+		switch me.Button {
+		case tea.MouseButtonWheelUp:
+			mm.ix = max(0, mm.ix-1)
+		case tea.MouseButtonWheelDown:
+			mm.ix = min(len(mm.items)-1, mm.ix+1)
+		}
+		return false, nil
+	}
 	km, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return false, nil
