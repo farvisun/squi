@@ -177,6 +177,8 @@ type Settings struct {
 	QueryParameters bool `toml:"query_parameters"`
 	// RestoreSession reopens the previous run's tabs and queries.
 	RestoreSession bool `toml:"restore_session"`
+	// CheckUpdates looks for a new release at most once a day.
+	CheckUpdates bool `toml:"check_updates"`
 	// Keys overrides key bindings: action name -> list of keys.
 	Keys map[string][]string `toml:"keys,omitempty"`
 }
@@ -192,6 +194,7 @@ func DefaultSettings() Settings {
 		ExplorerWidth:   32,
 		RestoreSession:  true,
 		QueryParameters: true,
+		CheckUpdates:    true,
 	}
 }
 

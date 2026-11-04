@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,6 +22,18 @@ import (
 )
 
 var version = "dev"
+
+// appVersion is the version set at build time, or the module version for
+// "go install …@v1.2.3", which sets no build flags.
+func appVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return strings.TrimPrefix(info.Main.Version, "v")
+	}
+	return version
+}
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "diff" {
@@ -50,7 +63,7 @@ func main() {
 	)
 	flag.Parse()
 	if *showVer {
-		fmt.Println("squi", version)
+		fmt.Println("squi", appVersion())
 		return
 	}
 	if err := run(*configDir, *connect, !*noMouse); err != nil {
@@ -130,7 +143,7 @@ func run(configDir, connect string, mouse bool) error {
 		store = config.NewStore(configDir)
 	}
 	bridge := &ui.Bridge{}
-	o := ui.Options{Store: store, Secrets: secrets.Keyring{}, Bridge: bridge, Connect: connect, Mouse: mouse}
+	o := ui.Options{Store: store, Secrets: secrets.Keyring{}, Bridge: bridge, Connect: connect, Mouse: mouse, Version: appVersion()}
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
 	// Extended key reporting (for ctrl+enter) needs our own input filter;
 	// Windows consoles deliver keys through a different API.

@@ -22,6 +22,7 @@ import (
 	"github.com/farvisun/squi/internal/ui/components"
 	"github.com/farvisun/squi/internal/ui/keymap"
 	"github.com/farvisun/squi/internal/ui/theme"
+	"github.com/farvisun/squi/internal/update"
 )
 
 type screen int
@@ -50,6 +51,8 @@ type Options struct {
 	TermWrite func(string)
 	// Mouse tells the UI that mouse reporting is on at startup.
 	Mouse bool
+	// Version is the running version; only released versions check for updates.
+	Version string
 	// DataGripRoot is the JetBrains configuration root (default: the
 	// platform's); tests point it elsewhere.
 	DataGripRoot string
@@ -101,6 +104,9 @@ type Model struct {
 	dragSeq      int
 	tabScroll    int
 	lastLayout   config.Layout
+	updater      *update.Client // nil when this build cannot compare versions
+	exePath      string
+	updateAvail  *update.Release
 	width        int
 	height       int
 	startErr     string
@@ -139,6 +145,11 @@ func New(o Options) (*Model, error) {
 		m.startErr = err.Error()
 	}
 	m.loadLayout()
+	if update.IsRelease(o.Version) {
+		if exe, err := update.Executable(); err == nil {
+			m.updater, m.exePath = update.New(o.Version), exe
+		}
+	}
 	keys, warns := keymap.New(st.Keys)
 	m.keys = keys
 	if len(warns) > 0 && m.startErr == "" {
@@ -211,6 +222,7 @@ func (m *Model) Init() tea.Cmd {
 	if m.startErr != "" {
 		cmds = append(cmds, m.toast(m.startErr, toastError))
 	}
+	cmds = append(cmds, m.autoUpdateCheck())
 	restoring := map[string]bool{}
 	for _, st := range m.pending {
 		if cfg, ok := m.connByID(st.Conn); ok && !restoring[cfg.ID] {
@@ -584,6 +596,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleMouse(msg)
 	case dragTickMsg:
 		return m, m.handleDragTick(msg)
+	case updateCheckedMsg:
+		return m, m.handleUpdateChecked(msg)
+	case updateAppliedMsg:
+		return m, m.handleUpdateApplied(msg)
 	case tea.KeyMsg:
 		m.endDrag() // a release that never arrived must not leave a drag running
 		if msg.Type == tea.KeyRunes && !msg.Paste && mouseLeak.MatchString(string(msg.Runes)) {
@@ -1104,6 +1120,9 @@ func (m *Model) statusBar(t *tab) string {
 			Render(fmt.Sprintf(" TX %s ", time.Since(t.txSince).Truncate(time.Second))), txMenu)
 	case t.manualTx:
 		add(seg.Render("· manual tx"), txMenu)
+	}
+	if m.updateAvail != nil {
+		add(m.updateBadge(), m.showUpdate)
 	}
 	right := ""
 	var rightRun func() tea.Cmd

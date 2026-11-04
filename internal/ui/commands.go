@@ -102,6 +102,8 @@ func init() {
 			run: func(m *Model, t *tab, _ string) tea.Cmd { return m.openExternalEditor(t) }},
 		{name: "format", aliases: []string{"fmt"}, desc: "Format the statement under the cursor (or the selection)", keys: "space f", needTab: true,
 			run: func(m *Model, t *tab, _ string) tea.Cmd { return m.formatSQL(t) }},
+		{name: "update", desc: "Check for a new squi release and update",
+			run: func(m *Model, t *tab, _ string) tea.Cmd { return m.checkForUpdate() }},
 		{name: "mouse", desc: "Turn mouse capture on or off (off: the terminal selects text)", keys: "@window m",
 			run: func(m *Model, t *tab, _ string) tea.Cmd { return m.toggleMouse() }},
 		{name: "clear", desc: "Clear the editor", needTab: true,

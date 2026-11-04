@@ -92,6 +92,9 @@ func (c *connManager) statusLine(m *Model) string {
 
 // mouse handles a press or wheel step at screen coordinates.
 func (c *connManager) mouse(m *Model, ev mouseEvent) tea.Cmd {
+	if ev.y == 0 && ev.btn == tea.MouseButtonLeft && m.updateAvail != nil {
+		return m.showUpdate()
+	}
 	if !ev.wheel && ev.btn == tea.MouseButtonLeft {
 		if k := hintAt(c.hits, ev.x, ev.y); k != "" {
 			return m.handleKey(keyPress(k))
@@ -612,6 +615,9 @@ func (c *connManager) applyTest(msg testMsg) {
 
 func (c *connManager) view(m *Model, w, h int) string {
 	title := theme.Title.Render("squi") + theme.Dim.Render(" — terminal SQL client")
+	if m.updateAvail != nil {
+		title += "  " + m.updateBadge() + theme.Dim.Render(" available")
+	}
 	if c.editing != nil {
 		head := "New connection"
 		if c.editing.ID != "" {
