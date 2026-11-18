@@ -33,7 +33,7 @@ nfpms:
     homepage: https://github.com/farvisun/squi
     maintainer: farvisun <farvisun@gmail.com>
     description: Lightweight terminal SQL client for PostgreSQL, MySQL, MariaDB, ClickHouse, SQL Server and SQLite
-    license: MIT
+    license: Apache-2.0
     formats: [deb, rpm, apk]
     bindir: /usr/bin
     contents:
@@ -55,7 +55,7 @@ brews:
       email: farvisun@gmail.com
     homepage: https://github.com/farvisun/squi
     description: Lightweight terminal SQL client for PostgreSQL, MySQL, MariaDB, ClickHouse, SQL Server and SQLite
-    license: MIT
+    license: Apache-2.0
     install: bin.install "squi"
     test: assert_match version.to_s, shell_output("#{bin}/squi --version")
 
@@ -74,4 +74,4 @@ scoops:
       email: farvisun@gmail.com
     homepage: https://github.com/farvisun/squi
     description: Lightweight terminal SQL client for PostgreSQL, MySQL, MariaDB, ClickHouse, SQL Server and SQLite
-    license: MIT
+    license: Apache-2.0

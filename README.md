@@ -9,7 +9,7 @@
   <a href="https://github.com/farvisun/squi/actions/workflows/ci.yml"><img src="https://github.com/farvisun/squi/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/farvisun/squi/releases/latest"><img src="https://img.shields.io/github/v/release/farvisun/squi?color=89b4fa" alt="Release"></a>
   <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/farvisun/squi?color=94e2d5" alt="Go"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-a6e3a1" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-a6e3a1" alt="Apache-2.0 license"></a>
 </p>
 
 <p align="center">
@@ -110,4 +110,4 @@ Contributions are welcome — please open an issue to discuss larger changes fir
 
 ## License
 
-[MIT](LICENSE)
+[Apache-2.0](LICENSE). Keep the [NOTICE](NOTICE) in any copy or derivative work
